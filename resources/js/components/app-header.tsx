@@ -32,7 +32,7 @@ import { cn, isSameUrl, resolveUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-react';
+import { BookOpen, BookUser, LayoutGrid, Mail, Calendar, Menu, Search } from 'lucide-react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 
@@ -42,19 +42,39 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: LayoutGrid,
     },
+    {
+        title: 'Calendar',
+        href: dashboard(),
+        icon: Calendar,
+    },
+    {
+        title: 'Appointments',
+        href: dashboard(),
+        icon: BookOpen,
+    },
+    {
+        title: 'Messages',
+        href: dashboard(),
+        icon: Mail,
+    },
+    {
+        title: 'Feedbacks',
+        href: dashboard(),
+        icon: BookUser,
+    },
 ];
 
 const rightNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
+    // {
+    //     title: 'Repository',
+    //     href: 'https://github.com/laravel/react-starter-kit',
+    //     icon: Folder,
+    // },
+    // {
+    //     title: 'Documentation',
+    //     href: 'https://laravel.com/docs/starter-kits#react',
+    //     icon: BookOpen,
+    // },
 ];
 
 const activeItemStyles =
@@ -185,7 +205,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                     </div>
 
                     <div className="ml-auto flex items-center space-x-2">
-                        <div className="relative flex items-center space-x-1">
+                        {/* <div className="relative flex items-center space-x-1">
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -225,7 +245,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                     </TooltipProvider>
                                 ))}
                             </div>
-                        </div>
+                        </div> */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
