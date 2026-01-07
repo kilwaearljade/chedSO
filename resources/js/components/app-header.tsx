@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -33,7 +36,7 @@ import { cn, isSameUrl, resolveUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, BookUser, LayoutGrid, Mail, Calendar, Menu, Search } from 'lucide-react';
+import { BookOpen, BookUser, LayoutGrid, Mail, Calendar, Menu, Search, Bell } from 'lucide-react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 
@@ -136,7 +139,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                             ))}
                                         </div>
 
-                                        <div className="flex flex-col space-y-4">
+                                        <div className="flex flex-col justify-end space-y-4">
                                             {rightNavItems.map((item) => (
                                                 <a
                                                     key={item.title}
@@ -169,44 +172,43 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                         <AppLogo />
                     </Link>
 
-                    {/* Desktop Navigation */}
-                    <div className="ml-6 hidden h-full items-center space-x-6 lg:flex">
-                        <NavigationMenu className="flex h-full items-stretch">
-                            <NavigationMenuList className="flex h-full items-stretch space-x-2">
-                                {mainNavItems.map((item, index) => (
-                                    <NavigationMenuItem
-                                        key={index}
-                                        className="relative flex h-full items-center"
-                                    >
-                                        <Link
-                                            href={item.href}
-                                            className={cn(
-                                                navigationMenuTriggerStyle(),
-                                                isSameUrl(
-                                                    page.url,
-                                                    item.href,
-                                                ) && activeItemStyles,
-                                                'h-9 cursor-pointer px-3',
-                                            )}
+                    <div className="ml-auto flex items-center space-x-5">
+                        {/* Desktop Navigation */}
+                        <div className="hidden h-full items-center space-x-6 lg:flex">
+                            <NavigationMenu className="flex h-full items-stretch">
+                                <NavigationMenuList className="flex h-full items-stretch space-x-2">
+                                    {mainNavItems.map((item, index) => (
+                                        <NavigationMenuItem
+                                            key={index}
+                                            className="relative flex h-full items-center"
                                         >
-                                            {item.icon && (
-                                                <Icon
-                                                    iconNode={item.icon}
-                                                    className="mr-2 h-4 w-4"
-                                                />
+                                            <Link
+                                                href={item.href}
+                                                className={cn(
+                                                    navigationMenuTriggerStyle(),
+                                                    isSameUrl(
+                                                        page.url,
+                                                        item.href,
+                                                    ) && activeItemStyles,
+                                                    'h-9 cursor-pointer px-3',
+                                                )}
+                                            >
+                                                {item.icon && (
+                                                    <Icon
+                                                        iconNode={item.icon}
+                                                        className="mr-2 h-4 w-4"
+                                                    />
+                                                )}
+                                                {item.title}
+                                            </Link>
+                                            {isSameUrl(page.url, item.href) && (
+                                                <div className="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-black dark:bg-white"></div>
                                             )}
-                                            {item.title}
-                                        </Link>
-                                        {isSameUrl(page.url, item.href) && (
-                                            <div className="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-black dark:bg-white"></div>
-                                        )}
-                                    </NavigationMenuItem>
-                                ))}
-                            </NavigationMenuList>
-                        </NavigationMenu>
-                    </div>
-
-                    <div className="ml-auto flex items-center space-x-2">
+                                        </NavigationMenuItem>
+                                    ))}
+                                </NavigationMenuList>
+                            </NavigationMenu>
+                        </div>
                         {/* <div className="relative flex items-center space-x-1">
                             <Button
                                 variant="ghost"
@@ -248,6 +250,65 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                 ))}
                             </div>
                         </div> */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="relative h-9 w-9"
+                                >
+                                    <Bell className="h-5 w-5" />
+                                    <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white">
+                                        3
+                                    </span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-80" align="end">
+                                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <div className="max-h-96 overflow-y-auto">
+                                    <DropdownMenuItem className="flex flex-col items-start p-3">
+                                        <div className="flex w-full items-start justify-between">
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">New appointment request</p>
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    You have a new appointment request from John Doe
+                                                </p>
+                                            </div>
+                                            <span className="text-xs text-muted-foreground ml-2">2m ago</span>
+                                        </div>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="flex flex-col items-start p-3">
+                                        <div className="flex w-full items-start justify-between">
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Appointment confirmed</p>
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    Your appointment for tomorrow has been confirmed
+                                                </p>
+                                            </div>
+                                            <span className="text-xs text-muted-foreground ml-2">1h ago</span>
+                                        </div>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="flex flex-col items-start p-3">
+                                        <div className="flex w-full items-start justify-between">
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">New message</p>
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    You have received a new message
+                                                </p>
+                                            </div>
+                                            <span className="text-xs text-muted-foreground ml-2">3h ago</span>
+                                        </div>
+                                    </DropdownMenuItem>
+                                </div>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="justify-center">
+                                    View all notifications
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button

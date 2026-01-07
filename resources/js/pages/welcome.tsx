@@ -25,8 +25,7 @@ export default function Welcome({
                             <img
                                 src="/images/1.png"
                                 alt="CHED XII Logo"
-                                className="h-10 w-10 lg:h-12 lg:w-12"
-                            />
+                                className="h-10 w-10 lg:h-12 lg:w-12"/>
                             <img
                                 src="/images/2.png"
                                 alt="CHED XII Logo"
