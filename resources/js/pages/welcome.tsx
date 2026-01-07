@@ -18,37 +18,55 @@ export default function Welcome({
                     rel="stylesheet"
                 />
             </Head>
-            <div className="flex min-h-screen flex-col items-center bg-[#FDFDFC] p-6 text-[#1b1b18] lg:justify-center lg:p-8 ">
-                {/* <header className="mb-6 w-full max-w-[335px] text-sm not-has-[nav]:hidden lg:max-w-4xl">
-                    <nav className="flex items-center justify-end bg-[#000000] gap-4">
-                        {auth.user ? (
-                            <Link
-                                href={dashboard()}
-                                className="inline-block rounded-sm border border-[#19140035] px-5 py-1.5 text-sm leading-normal text-[#f2f2f2] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
-                            >
-                                Dashboard
-                            </Link>
-                        ) : (
-                            <>
+            <div className="flex min-h-screen flex-col items-center bg-background text-foreground lg:justify-center">
+                <header className="w-full bg-background shadow-lg">
+                    <nav className="flex w-full items-center justify-between px-6 py-5 lg:px-12">
+                        <div className="flex items-center gap-3">
+                            <img
+                                src="/images/1.png"
+                                alt="CHED XII Logo"
+                                className="h-10 w-10 lg:h-12 lg:w-12"
+                            />
+                            <img
+                                src="/images/2.png"
+                                alt="CHED XII Logo"
+                                className="h-10 w-10 lg:h-12 lg:w-12"
+                            />
+                            <h2 className="text-xl font-bold text-foreground lg:text-2xl">
+                                CHED XII
+                            </h2>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            {auth.user ? (
                                 <Link
-                                    href={login()}
-                                    className="inline-block rounded-sm border border-transparent px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#19140035] dark:text-[#EDEDEC] dark:hover:border-[#3E3E3A]"
+                                    href={dashboard()}
+                                    className="rounded-lg bg-white/10 px-6 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20 hover:shadow-md"
                                 >
-                                    Log in
+                                    Dashboard
                                 </Link>
-                                {canRegister && (
+                            ) : (
+                                <>
                                     <Link
-                                        href={register()}
-                                        className="inline-block rounded-sm border border-[#19140035] px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
+                                        href={login()}
+                                        className="rounded-lg px-6 py-2.5 text-sm font-semibold bg-primary text-foreground transition-all hover:bg-background hover:text-primary border hover:border-primary hover:shadow-md"
                                     >
-                                        Register
+                                        Log in
                                     </Link>
-                                )}
-                            </>
-                        )}
+                                    {canRegister && (
+                                        <Link
+                                            href={register()}
+                                            className="rounded-lg bg-white px-6 py-2.5 text-sm font-semibold text-primary transition-all hover:bg-blue-50 hover:shadow-md"
+                                        >
+                                            Register
+                                        </Link>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </nav>
-                </header> */}
-                <div className="flex w-full items-center justify-center opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0">
+                </header>
+                <div className="w-full p-6 lg:p-8">
+                    <div className="flex w-full items-center justify-center opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0">
                         <main className="w-full max-w-7xl px-6 lg:px-8">
 
                             {/* HERO SECTION */}
@@ -63,7 +81,7 @@ export default function Welcome({
                                         </span>
                                     </h1>
 
-                                    <p className="max-w-xl text-lg text-black">
+                                    <p className="max-w-xl text-lg text-muted-foreground">
                                         A modern digital platform designed to manage school appointments
                                         efficiently with CHED. Schedule visits, monitor availability,
                                         and manage requests securely.
@@ -81,7 +99,7 @@ export default function Welcome({
 
                                             <Link
                                                 href={login()}
-                                                className="rounded-xl border border-slate-300 px-10 py-4 text-center font-semibold transition hover:bg-slate-300 "
+                                                className="rounded-xl border border-border px-10 py-4 text-center font-semibold transition hover:bg-secondary"
                                             >
                                                 Sign In
                                             </Link>
@@ -103,9 +121,9 @@ export default function Welcome({
 
                                 {/* IMAGE */}
                                 <div className="relative hidden lg:block">
-                                    <div className="rounded-3xl bg-white p-6 shadow-xl dark:bg-[#111]">
+                                    <div className="rounded-3xl bg-card p-6 shadow-xl">
                                         <img
-                                            src="/4.jpg"
+                                            src="/images/4.jpg"
                                             alt="CHED"
                                             className="w-full rounded-2xl object-cover"
                                         />
@@ -117,7 +135,7 @@ export default function Welcome({
                             <section className="py-24">
                                 <div className="mb-16 text-center">
                                     <h2 className="mb-4 text-4xl font-extrabold">About Us</h2>
-                                    <p className="mx-auto max-w-2xl text-lg text-black ">
+                                    <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
                                         Everything you need to manage appointments securely,
                                         efficiently, and professionally.
                                     </p>
@@ -200,7 +218,7 @@ export default function Welcome({
                                 </div>
                             </section>
                         </main>
-
+                    </div>
                 </div>
                 <div className="hidden h-14.5 lg:block"></div>
             </div>
