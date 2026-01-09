@@ -34,6 +34,10 @@ import { UserMenuContent } from '@/components/user-menu-content';
 import { useInitials } from '@/hooks/use-initials';
 import { cn, isSameUrl, resolveUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import { calendar } from '@/routes'
+import { appointment } from '@/routes'
+import { messages } from '@/routes'
+import { feedback } from '@/routes'
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import { BookOpen, BookUser, LayoutGrid, Mail, Calendar, Menu, Search, Bell } from 'lucide-react';
@@ -48,22 +52,22 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Calendar',
-        href: dashboard(),
+        href: calendar(),
         icon: Calendar,
     },
     {
         title: 'Appointments',
-        href: dashboard(),
+        href: appointment(),
         icon: BookOpen,
     },
     {
         title: 'Messages',
-        href: dashboard(),
+        href: messages(),
         icon: Mail,
     },
     {
         title: 'Feedbacks',
-        href: dashboard(),
+        href: feedback(),
         icon: BookUser,
     },
 ];
