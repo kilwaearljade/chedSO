@@ -47,7 +47,7 @@ export default function Welcome({
                                 <>
                                     <Link
                                         href={login()}
-                                        className="rounded-lg px-6 py-2.5 text-sm font-semibold bg-primary text-foreground transition-all hover:bg-background hover:text-primary border hover:border-primary hover:shadow-md"
+                                        className="rounded-lg px-6 py-2.5 text-sm font-semibold bg-primary text-white transition-all hover:bg-background hover:text-primary border hover:border-primary hover:shadow-md"
                                     >
                                         Log in
                                     </Link>
