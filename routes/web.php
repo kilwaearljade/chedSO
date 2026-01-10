@@ -8,9 +8,9 @@ Route::get('/', function () {
     return Inertia::render('welcome', [
         'canRegister' => Features::enabled(Features::registration()),
     ]);
-})->name('home');
+})->middleware('guest')->name('home');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'authorization:admin'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('admin/dashboard');
     })->name('dashboard');
@@ -30,6 +30,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('feedback', function () {
         return Inertia::render('admin/feedback');
     })->name('feedback');
+});
+Route::middleware(['auth', 'verified', 'authorization:school'])->group(function () {
+    Route::get('school/dashboard', function () {
+        return Inertia::render('school/dashboard');
+    })->name('schooldashboard');
+    Route::get('school/calendar', function () {
+        return Inertia::render('school/calendar');
+    })->name('schoolcalendar');
 });
 
 require __DIR__.'/settings.php';
