@@ -25,4 +25,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
+
+    // Admin only: History Logs
+    Route::get('settings/history-logs', [\App\Http\Controllers\Settings\HistoryLogsController::class, 'index'])
+        ->middleware('authorization:admin')
+        ->name('history-logs.index');
 });
