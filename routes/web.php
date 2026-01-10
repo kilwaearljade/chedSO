@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\SchoolController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -9,6 +10,8 @@ Route::get('/', function () {
         'canRegister' => Features::enabled(Features::registration()),
     ]);
 })->middleware('guest')->name('home');
+
+
 
 // Admin Routes
 Route::middleware(['auth', 'verified', 'authorization:admin'])->group(function () {
@@ -27,6 +30,9 @@ Route::middleware(['auth', 'verified', 'authorization:admin'])->group(function (
     Route::get('feedback', function () {
         return Inertia::render('admin/feedback');
     })->name('feedback');
+    Route::get('schools', [SchoolController::class, 'index'])->name('schoolslist');
+    Route::patch('schools/{user}/approve', [SchoolController::class, 'approve'])->name('schools.approve');
+    Route::patch('schools/{user}/decline', [SchoolController::class, 'decline'])->name('schools.decline');
 });
 
 // School Routes
@@ -43,6 +49,9 @@ Route::middleware(['auth', 'verified', 'authorization:school'])->group(function 
     Route::get('school/messages', function () {
         return Inertia::render('school/message');
     })->name('schoolmessages');
+    Route::get('waiting', function () {
+        return Inertia::render('waitingpage');
+    })->name('waiting');
 });
 
 require __DIR__.'/settings.php';

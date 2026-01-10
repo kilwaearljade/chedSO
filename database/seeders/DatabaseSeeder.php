@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
                 'password' => 'password',
                 'email_verified_at' => now(),
                 'role' => 'admin',
+                'is_approve' => true,
             ]
         );
         User::firstOrCreate(
@@ -29,6 +30,7 @@ class DatabaseSeeder extends Seeder
                 'password' => 'password',
                 'email_verified_at' => now(),
                 'role' => 'school',
+                'is_approve' => false,
             ]
         );
     }

@@ -39,6 +39,7 @@ import {
     appointment,
     messages,
     feedback,
+    schoolslist,
     schooldashboard,
     schoolcalendar,
     schoolfeedback,
@@ -67,8 +68,8 @@ const mainNavItems: NavItem[] = [
         icon: BookOpen,
     },
     {
-        title: 'Users',
-        href: appointment(),
+        title: 'Schools',
+        href: schoolslist(),
         icon: User2Icon,
     },
     {
