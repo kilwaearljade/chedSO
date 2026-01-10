@@ -1,5 +1,5 @@
 import AppLayout from '@/layouts/app-layout';
-import { dashboard } from '@/routes';
+import { calendar } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,11 +7,24 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Plus, Search, Calendar as CalendarIcon, Clock, Filter } from 'lucide-react';
 import { useState } from 'react';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Calendar',
-        href: dashboard().url,
+        href: calendar().url,
     },
 ];
 
@@ -54,7 +67,7 @@ export default function Calendar() {
     const renderCalendarDays = () => {
         const days = [];
         const totalCells = 42; // 6 weeks × 7 days
-        
+
         // Empty cells for days before the first day of the month
         for (let i = 0; i < firstDayOfMonth; i++) {
             days.push(
@@ -280,10 +293,36 @@ export default function Calendar() {
                                         {monthNames[currentMonth]} {currentYear}
                                     </CardTitle>
 
-                                    <Button>
-                                        <Plus className="mr-2 h-4 w-4" />
-                                        Add Event
-                                    </Button>
+                                     <Sheet>
+                                        <SheetTrigger>
+                                            <Button variant="outline"><Plus className="mr-2 h-4 w-4" /> Add Event</Button>
+                                        </SheetTrigger>
+                                        <SheetContent className="overflow-auto">
+                                            <SheetHeader>
+                                                <SheetTitle>Add New Event</SheetTitle>
+                                                <SheetDescription>
+                                                    Fill in the details below to create a new event.
+                                                </SheetDescription>
+                                            </SheetHeader>
+                                                <div className="grid flex-1 auto-rows-min gap-6 px-4">
+                                                    <div className="grid gap-3">
+                                                        <Label htmlFor="sheet-demo-name">Event title</Label>
+                                                        <Input id="sheet-demo-name" defaultValue="Title" />
+                                                    </div>
+                                                    <div className="grid gap-3">
+                                                        <Label htmlFor="sheet-demo-username">Username</Label>
+                                                        <Input id="sheet-demo-username" defaultValue="@peduarte" />
+                                                    </div>
+                                                </div>
+                                                <SheetFooter>
+                                                    <Button type="submit">Save Event</Button>
+                                                    <SheetClose asChild>
+                                                        <Button variant="outline">Close</Button>
+                                                    </SheetClose>
+                                                </SheetFooter>
+                                        </SheetContent>
+
+                                    </Sheet>
                                 </div>
                             </CardHeader>
                             <CardContent>

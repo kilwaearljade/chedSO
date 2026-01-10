@@ -40,11 +40,13 @@ import {
     messages,
     feedback,
     schooldashboard,
-    schoolcalendar
+    schoolcalendar,
+    schoolfeedback,
+    schoolmessages
 } from '@/routes';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, BookUser, LayoutGrid, Mail, Calendar, Menu, Search, Bell, Home } from 'lucide-react';
+import { BookOpen, BookUser, LayoutGrid, Mail, Calendar, Menu, Search, Bell, Home, User2Icon } from 'lucide-react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 
@@ -63,6 +65,11 @@ const mainNavItems: NavItem[] = [
         title: 'Appointments',
         href: appointment(),
         icon: BookOpen,
+    },
+    {
+        title: 'Users',
+        href: appointment(),
+        icon: User2Icon,
     },
     {
         title: 'Messages',
@@ -88,12 +95,12 @@ const userNavItems: NavItem[] = [
     },
     {
         title: 'Message',
-        href: '#',
+        href: schoolmessages(),
         icon: Mail,
     },
     {
         title: 'Feedbacks',
-        href: '#',
+        href: schoolfeedback(),
         icon: BookUser,
     },
 ];
