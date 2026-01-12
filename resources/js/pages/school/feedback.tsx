@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Head } from "@inertiajs/react";
+import { Head, router } from "@inertiajs/react";
 import AppLayout from "@/layouts/app-layout";
 import { type BreadcrumbItem } from "@/types";
 import {
@@ -39,7 +39,7 @@ export default function Feedback({ status }: FeedbackPageProps) {
     }>({});
     const [submitted, setSubmitted] = useState<boolean>(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
         // Reset errors
@@ -65,26 +65,32 @@ export default function Feedback({ status }: FeedbackPageProps) {
 
         setProcessing(true);
 
-        // TODO: Replace with actual form submission using Inertia.js
-        // Example: router.post('/feedback', { rating, comment })
-        try {
-            // Simulate API call
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            
-            // On success
-            setSubmitted(true);
-            setRating(0);
-            setComment("");
-            
-            // Reset submitted state after 3 seconds
-            setTimeout(() => {
-                setSubmitted(false);
-            }, 3000);
-        } catch (error) {
-            setErrors({ comment: "Failed to submit feedback. Please try again." });
-        } finally {
-            setProcessing(false);
-        }
+        router.post('/school/feedback', {
+            rating,
+            comment: comment.trim(),
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setSubmitted(true);
+                setRating(0);
+                setComment("");
+                setErrors({});
+                
+                // Reset submitted state after 3 seconds
+                setTimeout(() => {
+                    setSubmitted(false);
+                }, 3000);
+            },
+            onError: (errors) => {
+                setErrors({
+                    rating: errors.rating,
+                    comment: errors.comment || errors.message,
+                });
+            },
+            onFinish: () => {
+                setProcessing(false);
+            },
+        });
     };
 
     const handleReset = () => {

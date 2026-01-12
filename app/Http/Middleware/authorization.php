@@ -25,8 +25,9 @@ class authorization
             } elseif (Auth::user()->role === 'school') {
                 if (Auth::user()->is_approve === false) {
                     return redirect()->route('waiting');
-                }
+                }else{
                 return redirect()->route('schooldashboard');
+                }
             }
             return redirect()->route('login');
         }
