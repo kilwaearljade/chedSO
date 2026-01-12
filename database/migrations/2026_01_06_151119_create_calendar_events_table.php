@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('calendar_events', function (Blueprint $table) {
             $table->id();
             $table->string('event_name');
+            $table->text('description')->nullable()->after('event_date');
             $table->date('event_date');
             $table->foreignId('created_by')->constrained('users')->onDelete('cascade');
             $table->timestamps();

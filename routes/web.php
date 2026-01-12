@@ -4,6 +4,8 @@ use App\Http\Controllers\FeedBackController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\SchoolFeedBack;
+use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\SchoolCalendarController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -21,9 +23,11 @@ Route::middleware(['auth', 'verified', 'authorization:admin'])->group(function (
     Route::get('dashboard', function () {
         return Inertia::render('admin/dashboard');
     })->name('dashboard');
-    Route::get('calendar', function () {
-        return Inertia::render('admin/calendar');
-    })->name('calendar');
+    Route::get('calendar', [CalendarController::class, 'index'])->name('calendar');
+    Route::get('calendar/events', [CalendarController::class, 'getEventsByDate'])->name('calendar.events');
+    Route::post('calendar/events', [CalendarController::class, 'store'])->name('calendar.events.store');
+    Route::put('calendar/events/{event}', [CalendarController::class, 'update'])->name('calendar.events.update');
+    Route::delete('calendar/events/{event}', [CalendarController::class, 'destroy'])->name('calendar.events.destroy');
     Route::get('appointment', function () {
         return Inertia::render('admin/appointment');
     })->name('appointment');
@@ -42,9 +46,11 @@ Route::middleware(['auth', 'verified', 'authorization:school'])->group(function 
     Route::get('school/dashboard', function () {
         return Inertia::render('school/dashboard');
     })->name('schooldashboard');
-    Route::get('school/calendar', function () {
-        return Inertia::render('school/calendar');
-    })->name('schoolcalendar');
+    Route::get('school/calendar', [SchoolCalendarController::class, 'index'])->name('schoolcalendar');
+    Route::get('school/calendar/appointments', [SchoolCalendarController::class, 'getAppointmentsByDate'])->name('schoolcalendar.appointments');
+    Route::post('school/calendar/appointments', [SchoolCalendarController::class, 'store'])->name('schoolcalendar.appointments.store');
+    Route::put('school/calendar/appointments/{appointment}', [SchoolCalendarController::class, 'update'])->name('schoolcalendar.appointments.update');
+    Route::delete('school/calendar/appointments/{appointment}', [SchoolCalendarController::class, 'destroy'])->name('schoolcalendar.appointments.destroy');
     Route::get('school/feedback', function () {
         return Inertia::render('school/feedback', [
             'status' => session('status'),

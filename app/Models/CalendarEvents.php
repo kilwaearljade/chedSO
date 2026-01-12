@@ -13,6 +13,7 @@ class CalendarEvents extends Model
     protected $fillable = [
         'event_name',
         'event_date',
+        'description',
         'created_by',
     ];
 
