@@ -5,10 +5,11 @@ import { Head, usePage, router, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Plus, Search, Calendar as CalendarIcon, Clock, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Search, Calendar as CalendarIcon, Clock, Filter, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import InputError from "@/components/input-error";
 
 import {
   Sheet,
@@ -76,12 +77,22 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
     const [searchQuery, setSearchQuery] = useState('');
 
     // Form for creating appointments
-    const { data, setData, post, processing, reset } = useForm({
+    const { data, setData, post, processing, reset, errors } = useForm({
         school_name: '',
         appointment_date: '',
         reason: '',
         file_count: 1,
     });
+
+    // Helper function to check if a date has an event
+    const hasEventOnDate = (dateString: string): boolean => {
+        return events.some(event => event.date === dateString);
+    };
+
+    // Helper function to get event name on a date
+    const getEventOnDate = (dateString: string): CalendarEvent | undefined => {
+        return events.find(event => event.date === dateString);
+    };
 
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -135,6 +146,14 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
     const handleSubmitAppointment = (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Check if selected date has an event
+        if (data.appointment_date && hasEventOnDate(data.appointment_date)) {
+            const event = getEventOnDate(data.appointment_date);
+            const errorMessage = `Cannot create appointment on this date. An event "${event?.name || 'Event'}" is scheduled on this date.`;
+            alert(errorMessage);
+            return;
+        }
+
         console.log('Submitting appointment:', data);
 
         // Use direct URL instead of route helper
@@ -147,7 +166,6 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
             },
             onError: (errors) => {
                 console.error('Validation errors:', errors);
-                alert('Error: ' + JSON.stringify(errors));
             },
         });
     };
@@ -231,27 +249,38 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         // Days of the current month
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(currentYear, currentMonth, day);
+            const dateString = date.toISOString().split('T')[0];
             const isToday = date.toDateString() === new Date().toDateString();
             const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
             const dayAppointments = getAppointmentsForDate(date);
+            const hasEvent = hasEventOnDate(dateString);
 
             days.push(
                 <div
                     key={day}
                     onClick={() => handleDateClick(day, 0)}
-                    className={`min-h-[120px] rounded-lg border border-border p-2 transition-all cursor-pointer hover:bg-muted/50 ${
+                    className={`min-h-[120px] rounded-lg border p-2 transition-all cursor-pointer hover:bg-muted/50 ${
                         isSelected ? 'ring-2 ring-primary bg-primary/5' : ''
-                    } ${isToday ? 'bg-primary/10 border-primary/50' : 'bg-card'}`}
+                    } ${isToday ? 'bg-primary/10 border-primary/50' : 'bg-card'} ${
+                        hasEvent ? 'border-destructive/50 bg-destructive/5' : 'border-border'
+                    }`}
                 >
                     <div className={`mb-2 flex items-center justify-between`}>
                         <span className={`text-sm font-semibold ${isToday ? 'text-primary' : 'text-foreground'}`}>
                             {day}
                         </span>
-                        {isToday && (
-                            <Badge variant="default" className="h-5 px-1.5 text-xs">
-                                Today
-                            </Badge>
-                        )}
+                        <div className="flex items-center gap-1">
+                            {hasEvent && (
+                                <Badge variant="destructive" className="h-5 px-1.5 text-xs">
+                                    Event
+                                </Badge>
+                            )}
+                            {isToday && (
+                                <Badge variant="default" className="h-5 px-1.5 text-xs">
+                                    Today
+                                </Badge>
+                            )}
+                        </div>
                     </div>
                     <div className="space-y-1">
                         {dayAppointments.slice(0, 2).map((item) => (
@@ -337,8 +366,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         for (let i = 0; i < firstDay; i++) {
             const day = daysInPrevMonth - firstDay + i + 1;
             const date = new Date(prevYear, prevMonth, day);
+            const dateString = date.toISOString().split('T')[0];
             const isToday = date.toDateString() === new Date().toDateString();
             const hasAppointment = getAppointmentsForDate(date).length > 0;
+            const hasEvent = hasEventOnDate(dateString);
 
             miniDays.push(
                 <button
@@ -361,7 +392,9 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         // Days of current month
         for (let day = 1; day <= lastDate; day++) {
             const date = new Date(currentYear, currentMonth, day);
+            const dateString = date.toISOString().split('T')[0];
             const hasAppointment = getAppointmentsForDate(date).length > 0;
+            const hasEvent = hasEventOnDate(dateString);
             const isToday = date.toDateString() === new Date().toDateString();
             const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
 
@@ -374,11 +407,19 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                             ? 'bg-primary text-primary-foreground'
                             : isToday
                             ? 'bg-primary/20 text-primary font-semibold'
+                            : hasEvent
+                            ? 'bg-destructive/20 text-destructive'
                             : 'hover:bg-muted text-foreground'
                     }`}
+                    title={hasEvent ? `Event: ${getEventOnDate(dateString)?.name || 'Event'}` : ''}
                 >
                     {day}
-                    {hasAppointment && (
+                    {hasEvent && (
+                        <span className={`absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${
+                            isSelected ? 'bg-primary-foreground' : 'bg-destructive'
+                        }`} />
+                    )}
+                    {!hasEvent && hasAppointment && (
                         <span className={`absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${
                             isSelected ? 'bg-primary-foreground' : 'bg-primary'
                         }`} />
@@ -395,8 +436,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
             const date = new Date(nextYear, nextMonth, day);
+            const dateString = date.toISOString().split('T')[0];
             const isToday = date.toDateString() === new Date().toDateString();
             const hasAppointment = getAppointmentsForDate(date).length > 0;
+            const hasEvent = hasEventOnDate(dateString);
 
             miniDays.push(
                 <button
@@ -405,11 +448,17 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                     className={`relative flex h-8 w-8 items-center justify-center rounded-md text-xs font-medium transition-colors opacity-60 hover:opacity-100 ${
                         isToday
                             ? 'bg-primary/20 text-primary font-semibold opacity-80'
+                            : hasEvent
+                            ? 'bg-destructive/20 text-destructive opacity-80'
                             : 'hover:bg-muted text-muted-foreground'
                     }`}
+                    title={hasEvent ? `Event: ${getEventOnDate(dateString)?.name || 'Event'}` : ''}
                 >
                     {day}
-                    {hasAppointment && (
+                    {hasEvent && (
+                        <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-destructive" />
+                    )}
+                    {!hasEvent && hasAppointment && (
                         <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
                     )}
                 </button>
@@ -693,6 +742,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                         onChange={(e) => setData('school_name', e.target.value)}
                                                         required
                                                     />
+                                                    <InputError message={errors.school_name} />
                                                 </div>
                                                 <div className="grid gap-3">
                                                     <Label htmlFor="appointment_date">Date</Label>
@@ -702,7 +752,17 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                         value={data.appointment_date}
                                                         onChange={(e) => setData('appointment_date', e.target.value)}
                                                         required
+                                                        className={hasEventOnDate(data.appointment_date) ? 'border-destructive' : ''}
                                                     />
+                                                    {hasEventOnDate(data.appointment_date) && (
+                                                        <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-2 rounded-md">
+                                                            <AlertCircle className="h-4 w-4" />
+                                                            <span>
+                                                                Cannot create appointment. An event "{getEventOnDate(data.appointment_date)?.name || 'Event'}" is scheduled on this date.
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <InputError message={errors.appointment_date} />
                                                 </div>
                                                 <div className="grid gap-3">
                                                     <Label htmlFor="reason">Description (optional)</Label>
@@ -725,13 +785,17 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                         onChange={(e) => setData('file_count', parseInt(e.target.value) || 1)}
                                                         required
                                                     />
+                                                    <InputError message={errors.file_count} />
                                                     <p className="text-xs text-muted-foreground">
-                                                        ℹ️ If over 200 files, appointments will be automatically split across multiple days (max 200/day, skipping weekends)
+                                                        ℹ️ If over 200 files, appointments will be automatically split across multiple days (max 200/day, skipping weekends and dates with events)
                                                     </p>
                                                 </div>
                                             </div>
                                             <SheetFooter className="mt-6">
-                                                <Button type="submit" disabled={processing}>
+                                                <Button 
+                                                    type="submit" 
+                                                    disabled={processing || (data.appointment_date && hasEventOnDate(data.appointment_date))}
+                                                >
                                                     {processing ? 'Saving...' : 'Save Appointment'}
                                                 </Button>
                                                 <SheetClose asChild>

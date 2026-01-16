@@ -3,7 +3,7 @@ import { schooldashboard } from '@/routes';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Search, MoreVertical, Phone, Video, Send, Paperclip, Smile } from 'lucide-react';
+import { Search, MoreVertical, Phone, Video, MessageSquare } from 'lucide-react';
 import { useInitials } from '@/hooks/use-initials';
 import { useState, useEffect, useRef, useCallback } from 'react';
 
@@ -35,6 +35,25 @@ interface MessagePageProps {
     conversations?: Conversation[];
 }
 
+// Predefined message options for school users
+const PREDEFINED_MESSAGES = [
+    "Good morning, I need assistance with my application.",
+    "Hello, I have a question about the submission requirements.",
+    "Hi, can you help me with the approval process?",
+    "Good afternoon, I need to update my school information.",
+    "Hello, I'm having trouble accessing my account.",
+    "Hi, when will my application be reviewed?",
+    "Good day, I need to submit additional documents.",
+    "Hello, can you clarify the registration process?",
+    "Hi, I need help with the calendar scheduling.",
+    "Good morning, I have a concern about my profile.",
+    "Hello, I need to reset my password.",
+    "Hi, can you provide information about upcoming events?",
+    "Good afternoon, I need assistance with document verification.",
+    "Hello, I have questions about the feedback system.",
+    "Hi, I need help understanding the requirements.",
+];
+
 export default function Message() {
     const getInitials = useInitials();
     const { props } = usePage<SharedData & MessagePageProps>();
@@ -43,10 +62,10 @@ export default function Message() {
     const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
     const [selectedConversation, setSelectedConversation] = useState<number | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
-    const [messageInput, setMessageInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
+    const [showMessageOptions, setShowMessageOptions] = useState(false);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -158,14 +177,13 @@ export default function Message() {
         };
     }, []);
 
-    const handleSendMessage = () => {
-        if (!messageInput.trim() || !selectedConversation || sending) {
+    const handleSendMessage = (messageText: string) => {
+        if (!messageText.trim() || !selectedConversation || sending) {
             return;
         }
 
-        const messageText = messageInput.trim();
-        setMessageInput('');
         setSending(true);
+        setShowMessageOptions(false);
 
         // Get CSRF token from cookie
         const getCsrfToken = () => {
@@ -187,15 +205,32 @@ export default function Message() {
             credentials: 'include',
             body: JSON.stringify({
                 receiver_id: selectedConversation,
-                message: messageText,
+                message: messageText.trim(),
             }),
         })
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.message) {
+                    // Add user's message
                     setMessages(prev => [...prev, data.message]);
+                    
+                    // Add auto-response if available (chatbot-like response)
+                    if (data.autoResponse) {
+                        // Add a small delay to make it feel more natural
+                        setTimeout(() => {
+                            setMessages(prev => [...prev, data.autoResponse]);
+                            // Scroll to bottom after auto-response
+                            setTimeout(() => {
+                                if (messagesEndRef.current) {
+                                    messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+                                }
+                            }, 100);
+                        }, 500);
+                    }
+                    
                     // Refresh conversations to update last message
                     fetchConversations();
+                    
                     // Auto-scroll to bottom when user sends a message
                     setTimeout(() => {
                         if (messagesEndRef.current) {
@@ -206,16 +241,8 @@ export default function Message() {
                 setSending(false);
             })
             .catch(() => {
-                setMessageInput(messageText); // Restore message on error
                 setSending(false);
             });
-    };
-
-    const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-        }
     };
 
     return (
@@ -386,34 +413,42 @@ export default function Message() {
                                     <div ref={messagesEndRef} />
                                 </div>
 
-                                {/* Message Input */}
-                                <div className="border-t border-border bg-card px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                        <button className="p-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                                            <Paperclip className="h-5 w-5" />
-                                        </button>
-                                        <div className="flex-1 relative">
-                                            <input
-                                                type="text"
-                                                placeholder="Type a message..."
-                                                value={messageInput}
-                                                onChange={(e) => setMessageInput(e.target.value)}
-                                                onKeyPress={handleKeyPress}
-                                                disabled={sending}
-                                                className="w-full px-4 py-2.5 pr-10 rounded-full bg-muted/50 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                                            />
-                                            <button className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                                                <Smile className="h-5 w-5" />
-                                            </button>
-                                        </div>
+                                {/* Message Options for School Users */}
+                                <div className="border-t border-border bg-card">
+                                    {/* Message Options Toggle */}
+                                    <div className="px-4 py-3">
                                         <button
-                                            onClick={handleSendMessage}
-                                            className="p-2.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            disabled={!messageInput.trim() || sending}
+                                            onClick={() => setShowMessageOptions(!showMessageOptions)}
+                                            disabled={sending}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            <Send className="h-5 w-5" />
+                                            <MessageSquare className="h-5 w-5" />
+                                            <span className="font-medium">Choose a message to send</span>
                                         </button>
                                     </div>
+
+                                    {/* Predefined Message Options */}
+                                    {showMessageOptions && (
+                                        <div className="px-4 pb-3 max-h-64 overflow-y-auto border-t border-border">
+                                            <div className="pt-3 space-y-2">
+                                                <p className="text-sm font-medium text-muted-foreground mb-2 px-2">
+                                                    Select a message:
+                                                </p>
+                                                <div className="grid gap-2">
+                                                    {PREDEFINED_MESSAGES.map((message, index) => (
+                                                        <button
+                                                            key={index}
+                                                            onClick={() => handleSendMessage(message)}
+                                                            disabled={sending}
+                                                            className="text-left px-4 py-3 rounded-lg bg-muted/50 hover:bg-muted border border-border text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:border-primary/50"
+                                                        >
+                                                            <p className="text-sm">{message}</p>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         ) : (

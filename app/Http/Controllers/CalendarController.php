@@ -91,9 +91,36 @@ class CalendarController extends Controller
                 'description' => $validated['description'] ?? null,
             ]);
 
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Event created successfully',
+                    'event' => [
+                        'id' => $event->id,
+                        'name' => $event->event_name,
+                        'date' => $event->event_date->format('Y-m-d'),
+                        'description' => $event->description,
+                    ]
+                ]);
+            }
+
             return redirect()->back()->with('success', 'Event created successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             Log::error('Error creating event: ' . $e->getMessage());
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create event: ' . $e->getMessage()
+                ], 500);
+            }
             return redirect()->back()->withErrors(['error' => 'Failed to create event: ' . $e->getMessage()]);
         }
     }

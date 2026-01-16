@@ -86,88 +86,144 @@ class SchoolCalendarController extends Controller
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'school_name' => 'required|string|max:255',
-            'appointment_date' => 'required|date',
-            'reason' => 'nullable|string',
-            'file_count' => 'required|integer|min:1',
-        ]);
-
-        $fileCount = $validated['file_count'];
-        $startDate = \Carbon\Carbon::parse($validated['appointment_date']);
-        $dailyLimit = 200; // Maximum files per day across all schools
-
-        // Calculate how many days needed
-        $appointments = [];
-        $remainingFiles = $fileCount;
-        $currentDate = $startDate->copy();
-        $splitSequence = 1;
-
-        // Keep track of the parent appointment ID
-        $parentAppointment = null;
-
-        while ($remainingFiles > 0) {
-            // Skip weekends
-            while ($currentDate->isWeekend()) {
-                $currentDate->addDay();
-            }
-
-            // Check current capacity for this date
-            $existingFilesCount = Appointments::whereDate('appointment_date', $currentDate)
-                ->sum('daily_file_count') ?: 0;
-
-            $availableCapacity = $dailyLimit - $existingFilesCount;
-
-            // If no capacity available, move to next day
-            if ($availableCapacity <= 0) {
-                $currentDate->addDay();
-                continue;
-            }
-
-            // Calculate files for this day
-            $filesForThisDay = min($remainingFiles, $availableCapacity);
-
-            // Create appointment for this day
-            $appointment = Appointments::create([
-                'school_name' => $validated['school_name'],
-                'appointment_date' => $currentDate->format('Y-m-d'),
-                'reason' => $validated['reason'] ?? null,
-                'file_count' => $fileCount, // Original total
-                'daily_file_count' => $filesForThisDay, // Files for this specific day
-                'assigned_by' => Auth::id(),
-                'status' => 'pending',
-                'is_split' => $fileCount > $dailyLimit, // Mark if it's a split appointment
-                'split_sequence' => $fileCount > $dailyLimit ? $splitSequence : null,
-                'parent_appointment_id' => null, // Will update child appointments
+        try {
+            $validated = $request->validate([
+                'school_name' => 'required|string|max:255',
+                'appointment_date' => 'required|date',
+                'reason' => 'nullable|string',
+                'file_count' => 'required|integer|min:1',
             ]);
 
-            // Set parent appointment (first one created)
-            if ($parentAppointment === null) {
-                $parentAppointment = $appointment;
-            } else {
-                // Update child appointments to reference parent
-                $appointment->update(['parent_appointment_id' => $parentAppointment->id]);
+            $fileCount = $validated['file_count'];
+            $startDate = \Carbon\Carbon::parse($validated['appointment_date']);
+            $dailyLimit = 200; // Maximum files per day across all schools
+
+            // Check if there's an event on the requested date
+            $hasEventOnDate = CalendarEvents::whereDate('event_date', $startDate)->exists();
+            if ($hasEventOnDate) {
+                $event = CalendarEvents::whereDate('event_date', $startDate)->first();
+                if ($request->expectsJson() || $request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Cannot create appointment on {$startDate->format('M d, Y')}. An event '{$event->event_name}' is scheduled on this date."
+                    ], 422);
+                }
+                return redirect()->back()->withErrors([
+                    'appointment_date' => "Cannot create appointment on {$startDate->format('M d, Y')}. An event '{$event->event_name}' is scheduled on this date."
+                ])->withInput();
             }
 
-            $appointments[] = $appointment;
-            $remainingFiles -= $filesForThisDay;
-            $splitSequence++;
-            $currentDate->addDay();
-        }
+            // Calculate how many days needed
+            $appointments = [];
+            $remainingFiles = $fileCount;
+            $currentDate = $startDate->copy();
+            $splitSequence = 1;
 
-        // Update all appointments with total splits count
-        $totalSplits = count($appointments);
-        if ($totalSplits > 1) {
-            foreach ($appointments as $apt) {
-                $apt->update(['total_splits' => $totalSplits]);
+            // Keep track of the parent appointment ID
+            $parentAppointment = null;
+
+            while ($remainingFiles > 0) {
+                // Skip weekends
+                while ($currentDate->isWeekend()) {
+                    $currentDate->addDay();
+                }
+
+                // Check if there's an event on this date
+                $hasEventOnDate = CalendarEvents::whereDate('event_date', $currentDate)->exists();
+                if ($hasEventOnDate) {
+                    $currentDate->addDay();
+                    continue; // Skip dates with events
+                }
+
+                // Check current capacity for this date
+                $existingFilesCount = Appointments::whereDate('appointment_date', $currentDate)
+                    ->sum('daily_file_count') ?: 0;
+
+                $availableCapacity = $dailyLimit - $existingFilesCount;
+
+                // If no capacity available, move to next day
+                if ($availableCapacity <= 0) {
+                    $currentDate->addDay();
+                    continue;
+                }
+
+                // Calculate files for this day
+                $filesForThisDay = min($remainingFiles, $availableCapacity);
+
+                // Create appointment for this day
+                $appointment = Appointments::create([
+                    'school_name' => $validated['school_name'],
+                    'appointment_date' => $currentDate->format('Y-m-d'),
+                    'reason' => $validated['reason'] ?? null,
+                    'file_count' => $fileCount, // Original total
+                    'daily_file_count' => $filesForThisDay, // Files for this specific day
+                    'assigned_by' => Auth::id(),
+                    'status' => 'pending',
+                    'is_split' => $fileCount > $dailyLimit, // Mark if it's a split appointment
+                    'split_sequence' => $fileCount > $dailyLimit ? $splitSequence : null,
+                    'parent_appointment_id' => null, // Will update child appointments
+                ]);
+
+                // Set parent appointment (first one created)
+                if ($parentAppointment === null) {
+                    $parentAppointment = $appointment;
+                } else {
+                    // Update child appointments to reference parent
+                    $appointment->update(['parent_appointment_id' => $parentAppointment->id]);
+                }
+
+                $appointments[] = $appointment;
+                $remainingFiles -= $filesForThisDay;
+                $splitSequence++;
+                $currentDate->addDay();
             }
-        }
 
-        return redirect()->back()->with('success',
-            $totalSplits > 1
+            // Update all appointments with total splits count
+            $totalSplits = count($appointments);
+            if ($totalSplits > 1) {
+                foreach ($appointments as $apt) {
+                    $apt->update(['total_splits' => $totalSplits]);
+                }
+            }
+
+            $message = $totalSplits > 1
                 ? "Appointment created and split into {$totalSplits} days due to daily capacity limits."
-                : 'Appointment created successfully'
-        );
+                : 'Appointment created successfully';
+
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $message,
+                    'appointments' => collect($appointments)->map(function ($apt) {
+                        return [
+                            'id' => $apt->id,
+                            'school_name' => $apt->school_name,
+                            'date' => $apt->appointment_date->format('Y-m-d'),
+                            'file_count' => $apt->file_count,
+                        ];
+                    })
+                ]);
+            }
+
+            return redirect()->back()->with('success', $message);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            return redirect()->back()->withErrors($e->errors())->withInput();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error creating appointment: ' . $e->getMessage());
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create appointment: ' . $e->getMessage()
+                ], 500);
+            }
+            return redirect()->back()->withErrors(['error' => 'Failed to create appointment: ' . $e->getMessage()]);
+        }
     }
 
     /**

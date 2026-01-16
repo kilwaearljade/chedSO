@@ -13,6 +13,33 @@ use Illuminate\Support\Facades\DB;
 class MessageController extends Controller
 {
     /**
+     * Get automatic admin response based on predefined message.
+     */
+    private function getAdminResponse(string $message): string
+    {
+        $responses = [
+            "Good morning, I need assistance with my application." => "Good morning! I'd be happy to help you with your application. Please provide your application reference number, and I'll look into it right away.",
+            "Hello, I have a question about the submission requirements." => "Hello! For submission requirements, please ensure you have completed all required documents including your school registration form, accreditation certificates, and any other relevant documentation. You can find the complete checklist in your dashboard.",
+            "Hi, can you help me with the approval process?" => "Hi! I can help you understand the approval process. Typically, applications are reviewed within 5-7 business days. You'll receive a notification once your application has been reviewed. Is there a specific aspect of the approval process you'd like to know more about?",
+            "Good afternoon, I need to update my school information." => "Good afternoon! To update your school information, please go to your profile settings and make the necessary changes. If you need to update critical information like your school name or address, please contact us directly for assistance.",
+            "Hello, I'm having trouble accessing my account." => "Hello! I'm sorry to hear you're having trouble accessing your account. Please try resetting your password using the 'Forgot Password' link on the login page. If the issue persists, please provide more details about the error you're encountering.",
+            "Hi, when will my application be reviewed?" => "Hi! Application reviews are typically completed within 5-7 business days from the date of submission. You can check the status of your application in your dashboard. If it's been longer than 7 days, please let me know and I'll investigate.",
+            "Good day, I need to submit additional documents." => "Good day! You can submit additional documents by going to your application page and using the 'Upload Documents' feature. Please ensure all documents are in PDF format and clearly labeled. If you encounter any issues, let me know.",
+            "Hello, can you clarify the registration process?" => "Hello! The registration process involves: 1) Creating an account, 2) Completing your school profile, 3) Submitting required documents, 4) Waiting for approval. Once approved, you'll have full access to the system. Would you like more details on any specific step?",
+            "Hi, I need help with the calendar scheduling." => "Hi! For calendar scheduling, you can view available appointment slots in the calendar section. Simply select a date and time that works for you. If you need to reschedule or cancel, you can do so from your appointments page.",
+            "Good morning, I have a concern about my profile." => "Good morning! I'm here to help with your profile concern. Please describe the specific issue you're experiencing, and I'll assist you in resolving it. You can also update most profile information directly from your settings page.",
+            "Hello, I need to reset my password." => "Hello! To reset your password, please click on 'Forgot Password' on the login page and enter your email address. You'll receive a password reset link via email. If you don't receive the email, please check your spam folder or contact support.",
+            "Hi, can you provide information about upcoming events?" => "Hi! You can find information about upcoming events in the calendar section of your dashboard. All scheduled events, meetings, and important dates are displayed there. Is there a specific event you're looking for?",
+            "Good afternoon, I need assistance with document verification." => "Good afternoon! Document verification typically takes 3-5 business days. You'll receive a notification once your documents have been verified. If you need to check the status, please visit your documents section in the dashboard.",
+            "Hello, I have questions about the feedback system." => "Hello! The feedback system allows you to submit comments, suggestions, or report issues. You can access it from the feedback section in your dashboard. Your feedback helps us improve our services. Is there something specific you'd like to know?",
+            "Hi, I need help understanding the requirements." => "Hi! I'd be happy to help you understand the requirements. The main requirements include: valid school registration, accreditation documents, and complete profile information. You can find a detailed checklist in your application dashboard. Which requirement would you like more information about?",
+        ];
+
+        // Return matching response or default
+        return $responses[$message] ?? "Thank you for your message. We have received your inquiry and will get back to you shortly. If this is urgent, please contact our support team directly.";
+    }
+
+    /**
      * Display messages page with conversations list.
      */
     public function index(): Response
@@ -177,7 +204,7 @@ class MessageController extends Controller
             'message' => $validated['message'],
         ]);
 
-        return response()->json([
+        $response = [
             'success' => true,
             'message' => [
                 'id' => $message->id,
@@ -185,7 +212,32 @@ class MessageController extends Controller
                 'text' => $message->message,
                 'timestamp' => $message->created_at->format('g:i A'),
             ],
-        ]);
+        ];
+
+        // Auto-respond if message is from school user to admin
+        if ($user->role === 'school' && $receiver->role === 'admin') {
+            // Get admin response
+            $adminResponse = $this->getAdminResponse($validated['message']);
+            
+            // Create auto-response from admin
+            $autoResponse = Message::create([
+                'sender_id' => $receiver->id,
+                'receiver_id' => $user->id,
+                'sender_role' => 'ched_admin',
+                'receiver_role' => 'school_registrar',
+                'message' => $adminResponse,
+            ]);
+
+            // Add auto-response to the response
+            $response['autoResponse'] = [
+                'id' => $autoResponse->id,
+                'sender' => 'other',
+                'text' => $autoResponse->message,
+                'timestamp' => $autoResponse->created_at->format('g:i A'),
+            ];
+        }
+
+        return response()->json($response);
     }
 
     /**
