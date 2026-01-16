@@ -1,7 +1,7 @@
 import AppLayout from '@/layouts/app-layout';
 import { calendar } from '@/routes';
 import { type BreadcrumbItem, type SharedData } from '@/types';
-import { Head, usePage, router } from '@inertiajs/react';
+import { Head, usePage, router, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,42 +31,58 @@ const breadcrumbs: BreadcrumbItem[] = [
 interface CalendarEvent {
     id: number;
     name: string;
-    date: string;
-    day: string;
+    date: string; // YYYY-MM-DD format
     description?: string;
     color: string;
+    type: 'event' | 'appointment'; // To distinguish between admin events and school appointments
+    school_name?: string; // For appointments - which school created it
+    status?: string; // For appointments - pending/cancelled/complete
 }
 
 interface CalendarPageProps {
-    events?: CalendarEvent[];
+    events: CalendarEvent[];
+    appointments: CalendarEvent[];
 }
 
-export default function Calendar({ events: initialEvents = [] }: CalendarPageProps) {
+export default function Calendar({ events: initialEvents = [], appointments: initialAppointments = [] }: CalendarPageProps) {
     const { auth } = usePage<SharedData>().props;
     const isAdmin = auth.user.role === 'admin';
 
-    const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
+    // Combine events and appointments into one array
+    const allItems = [
+        ...initialEvents.map(e => ({ ...e, type: 'event' as const })),
+        ...initialAppointments.map(a => ({ ...a, type: 'appointment' as const }))
+    ];
+
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date().getDate());
     const [selectedDateFull, setSelectedDateFull] = useState<Date | null>(null);
     const [isDateSheetOpen, setIsDateSheetOpen] = useState(false);
     const [isAddEventSheetOpen, setIsAddEventSheetOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [loading, setLoading] = useState(false);
 
-    // Form state
-    const [eventTitle, setEventTitle] = useState('');
-    const [eventDate, setEventDate] = useState('');
-    const [eventDescription, setEventDescription] = useState('');
+    // Form for creating events using Inertia
+    const { data, setData, post, processing, reset } = useForm({
+        event_name: '',
+        event_date: '',
+        description: '',
+    });
 
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dayNamesShort = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    const dayNamesShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+
+    // Set default date when selectedDateFull changes
+    useEffect(() => {
+        if (selectedDateFull) {
+            setData('event_date', selectedDateFull.toISOString().split('T')[0]);
+        }
+    }, [selectedDateFull]);
 
     const navigateMonth = (direction: 'prev' | 'next') => {
         setCurrentDate(new Date(currentYear, currentMonth + (direction === 'next' ? 1 : -1), 1));
@@ -78,41 +94,22 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
         setSelectedDate(today.getDate());
     };
 
-    // Refresh events from server
-    const refreshEvents = () => {
-        router.reload({
-            only: ['events'],
-            onSuccess: (page) => {
-                const props = page.props as unknown as SharedData & CalendarPageProps;
-                if (props.events) {
-                    setEvents(props.events);
-                }
-            },
-        });
-    };
-
-    const getEventsForDate = (day: number, month?: number, year?: number) => {
-        const targetDate = new Date(year || currentYear, (month !== undefined ? month : currentMonth), day);
-        const dateString = targetDate.toISOString().split('T')[0];
-        return events.filter(event => {
-            const eventDate = new Date(event.date);
-            return eventDate.getDate() === day &&
-                   eventDate.getMonth() === (month !== undefined ? month : currentMonth) &&
-                   eventDate.getFullYear() === (year || currentYear);
-        });
+    const getItemsForDate = (dateObj: Date): CalendarEvent[] => {
+        const dateString = dateObj.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        return allItems.filter(item => item.date === dateString);
     };
 
     const handleDateClick = (day: number, monthOffset: number = 0) => {
         const newDate = new Date(currentYear, currentMonth + monthOffset, day);
-        setCurrentDate(newDate);
+        setCurrentDate(new Date(currentYear, currentMonth + monthOffset, 1));
         setSelectedDate(day);
         setSelectedDateFull(newDate);
         setIsDateSheetOpen(true);
     };
 
-    const getSelectedDateEvents = () => {
+    const getSelectedDateItems = () => {
         if (!selectedDateFull) return [];
-        return getEventsForDate(selectedDateFull.getDate(), selectedDateFull.getMonth(), selectedDateFull.getFullYear());
+        return getItemsForDate(selectedDateFull);
     };
 
     const formatSelectedDate = () => {
@@ -120,101 +117,50 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
         return `${monthNames[selectedDateFull.getMonth()]} ${selectedDateFull.getDate()}, ${selectedDateFull.getFullYear()}`;
     };
 
-    // Helper to read CSRF token from cookie (for fetch requests)
-    const getCsrfToken = (): string => {
-        const name = 'XSRF-TOKEN';
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop()?.split(';').shift() ?? '';
-        return '';
-    };
+    const handleSubmitEvent = (e: React.FormEvent) => {
+        e.preventDefault();
 
-    const handleSaveEvent = async () => {
-        if (!eventTitle || !eventDate) return;
+        console.log('Submitting event:', data);
 
-        setLoading(true);
-        try {
-            const response = await fetch('/calendar/events', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken()),
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    event_name: eventTitle,
-                    event_date: eventDate,
-                    description: eventDescription || null,
-                }),
-            });
-
-            if (!response.ok) {
-                // Try to parse the response for error details
-                let err = null;
-                try {
-                    err = await response.json();
-                } catch (e) {
-                    // ignore
-                }
-                console.error('Failed to save event', err || response.statusText);
-                return;
-            }
-
-            const data = await response.json();
-
-            if (data.success) {
-                refreshEvents();
+        post('/calendar/events', {
+            onSuccess: () => {
+                console.log('Event created successfully!');
+                reset();
                 setIsAddEventSheetOpen(false);
-                setEventTitle('');
-                setEventDate('');
-                setEventDescription('');
-            }
-        } catch (error) {
-            console.error('Error saving event:', error);
-        } finally {
-            setLoading(false);
-        }
+                router.reload();
+            },
+            onError: (errors) => {
+                console.error('Validation errors:', errors);
+                alert('Error: ' + JSON.stringify(errors));
+            },
+        });
     };
 
-    const handleDeleteEvent = async (eventId: number) => {
-        if (!confirm('Are you sure you want to delete this event?')) return;
+    const handleDeleteEvent = (itemId: number, itemType: 'event' | 'appointment') => {
+        if (!confirm(`Are you sure you want to delete this ${itemType}?`)) return;
 
-        setLoading(true);
-        try {
-            const response = await fetch(`/calendar/events/${eventId}`, {
-                method: 'DELETE',
-                headers: {
-                    'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken()),
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
-                credentials: 'include',
-            });
+        const url = itemType === 'event'
+            ? `/calendar/events/${itemId}`
+            : `/calendar/appointments/${itemId}`;
 
-            if (!response.ok) {
-                let err = null;
-                try {
-                    err = await response.json();
-                } catch (e) {
-                    // ignore
-                }
-                console.error('Failed to delete event', err || response.statusText);
-                return;
-            }
-
-            const data = await response.json();
-
-            if (data.success) {
-                refreshEvents();
-            }
-        } catch (error) {
-            console.error('Error deleting event:', error);
-        } finally {
-            setLoading(false);
-        }
+        router.delete(url, {
+            onSuccess: () => {
+                console.log(`${itemType} deleted successfully!`);
+                router.reload();
+            },
+            onError: (errors) => {
+                console.error('Delete error:', errors);
+                alert(`Error deleting ${itemType}`);
+            },
+        });
     };
+
+    // Filter items based on search query
+    const filteredItems = allItems.filter(item =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (item.school_name && item.school_name.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
     const renderCalendarDays = () => {
         const days = [];
@@ -225,14 +171,12 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
         const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
         const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
 
-        // Days from previous month (before the first day of current month)
+        // Days from previous month
         for (let i = 0; i < firstDayOfMonth; i++) {
             const day = daysInPrevMonth - firstDayOfMonth + i + 1;
             const date = new Date(prevYear, prevMonth, day);
-            const isToday = date.getDate() === new Date().getDate() &&
-                           date.getMonth() === new Date().getMonth() &&
-                           date.getFullYear() === new Date().getFullYear();
-            const dayEvents = getEventsForDate(day, prevMonth, prevYear);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const dayItems = getItemsForDate(date);
 
             days.push(
                 <div
@@ -253,18 +197,18 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                         )}
                     </div>
                     <div className="space-y-1">
-                        {dayEvents.slice(0, 2).map((event) => (
+                        {dayItems.slice(0, 2).map((item) => (
                             <div
-                                key={event.id}
-                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${event.color}`}
-                                title={event.name}
+                                key={`${item.type}-${item.id}`}
+                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${item.color}`}
+                                title={item.name}
                             >
-                                {event.name}
+                                {item.name}
                             </div>
                         ))}
-                        {dayEvents.length > 2 && (
+                        {dayItems.length > 2 && (
                             <div className="text-xs text-muted-foreground font-medium">
-                                +{dayEvents.length - 2} more
+                                +{dayItems.length - 2} more
                             </div>
                         )}
                     </div>
@@ -274,9 +218,10 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
 
         // Days of the current month
         for (let day = 1; day <= daysInMonth; day++) {
-            const isToday = day === new Date().getDate() && currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear();
-            const isSelected = day === selectedDate;
-            const dayEvents = getEventsForDate(day);
+            const date = new Date(currentYear, currentMonth, day);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
+            const dayItems = getItemsForDate(date);
 
             days.push(
                 <div
@@ -297,18 +242,18 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                         )}
                     </div>
                     <div className="space-y-1">
-                        {dayEvents.slice(0, 2).map((event) => (
+                        {dayItems.slice(0, 2).map((item) => (
                             <div
-                                key={event.id}
-                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${event.color}`}
-                                title={event.name}
+                                key={`${item.type}-${item.id}`}
+                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${item.color}`}
+                                title={item.name}
                             >
-                                {event.name}
+                                {item.name}
                             </div>
                         ))}
-                        {dayEvents.length > 2 && (
+                        {dayItems.length > 2 && (
                             <div className="text-xs text-muted-foreground font-medium">
-                                +{dayEvents.length - 2} more
+                                +{dayItems.length - 2} more
                             </div>
                         )}
                     </div>
@@ -316,17 +261,15 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
             );
         }
 
-        // Days from next month (to complete the grid)
+        // Days from next month
         const remainingCells = totalCells - days.length;
         for (let i = 1; i <= remainingCells; i++) {
             const day = i;
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
             const date = new Date(nextYear, nextMonth, day);
-            const isToday = date.getDate() === new Date().getDate() &&
-                           date.getMonth() === new Date().getMonth() &&
-                           date.getFullYear() === new Date().getFullYear();
-            const dayEvents = getEventsForDate(day, nextMonth, nextYear);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const dayItems = getItemsForDate(date);
 
             days.push(
                 <div
@@ -347,18 +290,18 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                         )}
                     </div>
                     <div className="space-y-1">
-                        {dayEvents.slice(0, 2).map((event) => (
+                        {dayItems.slice(0, 2).map((item) => (
                             <div
-                                key={event.id}
-                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${event.color}`}
-                                title={event.name}
+                                key={`${item.type}-${item.id}`}
+                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${item.color}`}
+                                title={item.name}
                             >
-                                {event.name}
+                                {item.name}
                             </div>
                         ))}
-                        {dayEvents.length > 2 && (
+                        {dayItems.length > 2 && (
                             <div className="text-xs text-muted-foreground font-medium">
-                                +{dayEvents.length - 2} more
+                                +{dayItems.length - 2} more
                             </div>
                         )}
                     </div>
@@ -374,7 +317,6 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
         const firstDay = new Date(currentYear, currentMonth, 1).getDay();
         const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-        // Calculate previous month's last days
         const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
         const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
         const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
@@ -383,11 +325,8 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
         for (let i = 0; i < firstDay; i++) {
             const day = daysInPrevMonth - firstDay + i + 1;
             const date = new Date(prevYear, prevMonth, day);
-            const isToday = date.getDate() === new Date().getDate() &&
-                           date.getMonth() === new Date().getMonth() &&
-                           date.getFullYear() === new Date().getFullYear();
-            const dayEvents = getEventsForDate(day, prevMonth, prevYear);
-            const hasEvent = dayEvents.length > 0;
+            const isToday = date.toDateString() === new Date().toDateString();
+            const hasItems = getItemsForDate(date).length > 0;
 
             miniDays.push(
                 <button
@@ -400,7 +339,7 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                     }`}
                 >
                     {day}
-                    {hasEvent && (
+                    {hasItems && (
                         <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
                     )}
                 </button>
@@ -409,10 +348,10 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
 
         // Days of current month
         for (let day = 1; day <= lastDate; day++) {
-            const dayEvents = getEventsForDate(day);
-            const hasEvent = dayEvents.length > 0;
-            const isToday = day === new Date().getDate() && currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear();
-            const isSelected = day === selectedDate;
+            const date = new Date(currentYear, currentMonth, day);
+            const hasItems = getItemsForDate(date).length > 0;
+            const isToday = date.toDateString() === new Date().toDateString();
+            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
 
             miniDays.push(
                 <button
@@ -427,7 +366,7 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                     }`}
                 >
                     {day}
-                    {hasEvent && (
+                    {hasItems && (
                         <span className={`absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${
                             isSelected ? 'bg-primary-foreground' : 'bg-primary'
                         }`} />
@@ -436,7 +375,7 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
             );
         }
 
-        // Days from next month (to complete the grid - only fill to complete weeks)
+        // Days from next month
         const totalDaysShown = firstDay + lastDate;
         const remainingCells = Math.ceil(totalDaysShown / 7) * 7 - totalDaysShown;
         for (let i = 1; i <= remainingCells; i++) {
@@ -444,11 +383,8 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
             const date = new Date(nextYear, nextMonth, day);
-            const isToday = date.getDate() === new Date().getDate() &&
-                           date.getMonth() === new Date().getMonth() &&
-                           date.getFullYear() === new Date().getFullYear();
-            const dayEvents = getEventsForDate(day, nextMonth, nextYear);
-            const hasEvent = dayEvents.length > 0;
+            const isToday = date.toDateString() === new Date().toDateString();
+            const hasItems = getItemsForDate(date).length > 0;
 
             miniDays.push(
                 <button
@@ -461,7 +397,7 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                     }`}
                 >
                     {day}
-                    {hasEvent && (
+                    {hasItems && (
                         <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
                     )}
                 </button>
@@ -470,6 +406,12 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
 
         return miniDays;
     };
+
+    // Get upcoming items sorted by date (filtered by search)
+    const upcomingItems = filteredItems
+        .filter(item => new Date(item.date) >= new Date(new Date().setHours(0, 0, 0, 0)))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 5);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -495,15 +437,15 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                                     </Button>
                                 </div>
                                 <CardDescription>
-                                    Select a date to view events
+                                    Events & Appointments
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {/* Mini Calendar */}
                                 <div>
                                     <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted-foreground">
-                                        {dayNamesShort.map((day) => (
-                                            <div key={day} className="h-8 flex items-center justify-center">
+                                        {dayNamesShort.map((day, index) => (
+                                            <div key={`day-header-${index}-${day}`} className="h-8 flex items-center justify-center">
                                                 {day}
                                             </div>
                                         ))}
@@ -518,53 +460,57 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                     <input
                                         type="text"
-                                        placeholder="Search events..."
+                                        placeholder="Search events & appointments..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                         className="w-full rounded-lg border border-border bg-muted/50 px-10 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                                     />
                                 </div>
 
-                                {/* Upcoming Events */}
+                                {/* Upcoming Items */}
                                 <div>
                                     <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
                                         <Filter className="h-4 w-4" />
-                                        Upcoming Events
+                                        Upcoming Items
                                     </h3>
                                     <div className="space-y-2">
-                                        {events
-                                            .filter(event => {
-                                                const eventDate = new Date(event.date);
-                                                return eventDate.getMonth() === currentMonth &&
-                                                       eventDate.getFullYear() === currentYear;
-                                            })
-                                            .slice(0, 5)
-                                            .map((event) => {
-                                                const eventDate = new Date(event.date);
-                                                return (
-                                                    <div
-                                                        key={event.id}
-                                                        className="flex items-center gap-2 rounded-lg border border-border bg-card p-2"
-                                                    >
-                                                        <div className={`h-2 w-2 rounded-full ${event.color}`} />
-                                                        <div className="flex-1 min-w-0">
+                                        {upcomingItems.length > 0 ? (
+                                            upcomingItems.map((item) => (
+                                                <div
+                                                    key={`${item.type}-${item.id}`}
+                                                    className="flex items-center gap-2 rounded-lg border border-border bg-card p-2 cursor-pointer hover:bg-muted/50"
+                                                    onClick={() => {
+                                                        const itemDate = new Date(item.date);
+                                                        setCurrentDate(new Date(itemDate.getFullYear(), itemDate.getMonth(), 1));
+                                                        setSelectedDate(itemDate.getDate());
+                                                        setSelectedDateFull(itemDate);
+                                                        setIsDateSheetOpen(true);
+                                                    }}
+                                                >
+                                                    <div className={`h-2 w-2 rounded-full ${item.color}`} />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
                                                             <p className="text-sm font-medium text-foreground truncate">
-                                                                {event.name}
+                                                                {item.name}
                                                             </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {monthNames[eventDate.getMonth()]} {eventDate.getDate()}, {eventDate.getFullYear()}
-                                                            </p>
+                                                            <Badge variant={item.type === 'event' ? 'default' : 'secondary'} className="h-5 px-1.5 text-xs">
+                                                                {item.type}
+                                                            </Badge>
                                                         </div>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {new Date(item.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                                        </p>
+                                                        {item.school_name && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                By: {item.school_name}
+                                                            </p>
+                                                        )}
                                                     </div>
-                                                );
-                                            })}
-                                        {events.filter(event => {
-                                            const eventDate = new Date(event.date);
-                                            return eventDate.getMonth() === currentMonth &&
-                                                   eventDate.getFullYear() === currentYear;
-                                        }).length === 0 && (
+                                                </div>
+                                            ))
+                                        ) : (
                                             <p className="text-sm text-muted-foreground text-center py-4">
-                                                No upcoming events
+                                                {searchQuery ? 'No items found' : 'No upcoming items'}
                                             </p>
                                         )}
                                     </div>
@@ -607,122 +553,74 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                                     </CardTitle>
 
                                     {isAdmin && (
-                                    <Sheet open={isAddEventSheetOpen} onOpenChange={(open) => {
-                                        setIsAddEventSheetOpen(open);
-                                        if (!open) {
-                                            setEventTitle('');
-                                            setEventDate('');
-                                            setEventDescription('');
-                                        }
-                                    }}>
-                                        <SheetTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => {
-                                                    setEventDate(new Date().toISOString().split('T')[0]);
-                                                    setEventTitle('');
-                                                    setEventDescription('');
-                                                }}
-                                            >
-                                                <Plus className="mr-2 h-4 w-4" /> Add Event
-                                            </Button>
-                                        </SheetTrigger>
-                                        <SheetContent className="overflow-auto">
-                                            <SheetHeader>
-                                                <SheetTitle>Add New Event</SheetTitle>
-                                                <SheetDescription>
-                                                    Fill in the details below to create a new event.
-                                                </SheetDescription>
-                                            </SheetHeader>
-                                            <div className="grid flex-1 auto-rows-min gap-6 px-4 mt-6">
-                                                <div className="grid gap-3">
-                                                    <Label htmlFor="add-event-title">Event title</Label>
-                                                    <Input
-                                                        id="add-event-title"
-                                                        placeholder="Enter event title"
-                                                        value={eventTitle}
-                                                        onChange={(e) => setEventTitle(e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="grid gap-3">
-                                                    <Label htmlFor="add-event-date">Date</Label>
-                                                    <Input
-                                                        id="add-event-date"
-                                                        type="date"
-                                                        value={eventDate || (selectedDateFull ? selectedDateFull.toISOString().split('T')[0] : new Date().toISOString().split('T')[0])}
-                                                        onChange={(e) => setEventDate(e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="grid gap-3">
-                                                    <Label htmlFor="add-event-description">Description (optional)</Label>
-                                                    <textarea
-                                                        id="add-event-description"
-                                                        placeholder="Enter event description"
-                                                        value={eventDescription}
-                                                        onChange={(e) => setEventDescription(e.target.value)}
-                                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <SheetFooter className="mt-6">
-                                                <Button
-                                                    type="submit"
-                                                    onClick={handleSaveEvent}
-                                                    disabled={loading || !eventTitle || !eventDate}
-                                                >
-                                                    {loading ? 'Saving...' : 'Save Event'}
-                                                </Button>
-                                                <SheetClose asChild>
-                                                    <Button variant="outline">Cancel</Button>
-                                                </SheetClose>
-                                            </SheetFooter>
-                                        </SheetContent>
-                                    </Sheet>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                setSelectedDateFull(new Date());
+                                                setIsAddEventSheetOpen(true);
+                                            }}
+                                        >
+                                            <Plus className="mr-2 h-4 w-4" /> Add Event
+                                        </Button>
                                     )}
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                {/* Date Events Sheet */}
+                                {/* Date Items Sheet */}
                                 <Sheet open={isDateSheetOpen} onOpenChange={setIsDateSheetOpen}>
                                     <SheetContent className="overflow-auto">
                                         <SheetHeader>
                                             <SheetTitle>
-                                                Events and Schedule for {formatSelectedDate()}
+                                                Schedule for {formatSelectedDate()}
                                             </SheetTitle>
                                             <SheetDescription>
-                                                {getSelectedDateEvents().length > 0
-                                                    ? `You have ${getSelectedDateEvents().length} event(s) on this date.`
-                                                    : 'No events scheduled for this date.'}
+                                                {getSelectedDateItems().length > 0
+                                                    ? `${getSelectedDateItems().length} item(s) scheduled for this date.`
+                                                    : 'No items scheduled for this date.'}
                                             </SheetDescription>
                                         </SheetHeader>
                                         <div className="mt-6 space-y-4">
-                                            {getSelectedDateEvents().length > 0 ? (
+                                            {getSelectedDateItems().length > 0 ? (
                                                 <div className="space-y-3">
-                                                    {getSelectedDateEvents().map((event) => (
+                                                    {getSelectedDateItems().map((item) => (
                                                         <div
-                                                            key={event.id}
+                                                            key={`${item.type}-${item.id}`}
                                                             className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 hover:bg-muted/50 transition-colors"
                                                         >
-                                                            <div className={`h-3 w-3 rounded-full mt-1.5 ${event.color}`} />
+                                                            <div className={`h-3 w-3 rounded-full mt-1.5 ${item.color}`} />
                                                             <div className="flex-1 min-w-0">
-                                                                <h4 className="text-sm font-semibold text-foreground">
-                                                                    {event.name}
-                                                                </h4>
-                                                                {event.description && (
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <h4 className="text-sm font-semibold text-foreground">
+                                                                        {item.name}
+                                                                    </h4>
+                                                                    <Badge variant={item.type === 'event' ? 'default' : 'secondary'} className="h-5 px-1.5 text-xs">
+                                                                        {item.type}
+                                                                    </Badge>
+                                                                </div>
+                                                                {item.description && (
                                                                     <p className="text-xs text-muted-foreground mt-1">
-                                                                        {event.description}
+                                                                        {item.description}
                                                                     </p>
+                                                                )}
+                                                                {item.school_name && (
+                                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                                        Created by: {item.school_name}
+                                                                    </p>
+                                                                )}
+                                                                {item.status && (
+                                                                    <Badge variant="outline" className="mt-2">
+                                                                        {item.status}
+                                                                    </Badge>
                                                                 )}
                                                             </div>
                                                             {isAdmin && (
                                                                 <Button
                                                                     variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-6 w-6"
-                                                                    onClick={() => handleDeleteEvent(event.id)}
-                                                                    disabled={loading}
+                                                                    size="sm"
+                                                                    onClick={() => handleDeleteEvent(item.id, item.type)}
+                                                                    className="text-destructive hover:text-destructive"
                                                                 >
-                                                                    ×
+                                                                    Delete
                                                                 </Button>
                                                             )}
                                                         </div>
@@ -732,25 +630,22 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                                                 <div className="flex flex-col items-center justify-center py-8 text-center">
                                                     <CalendarIcon className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
                                                     <p className="text-sm text-muted-foreground">
-                                                        No events scheduled for this date.
+                                                        No items scheduled for this date.
                                                     </p>
                                                 </div>
                                             )}
                                         </div>
                                         <SheetFooter className="mt-6 flex-col sm:flex-row gap-2">
                                             {isAdmin && (
-                                            <Button
-                                                onClick={() => {
-                                                    setEventDate(selectedDateFull ? selectedDateFull.toISOString().split('T')[0] : '');
-                                                    setEventTitle('');
-                                                    setEventDescription('');
-                                                    setIsDateSheetOpen(false);
-                                                    setIsAddEventSheetOpen(true);
-                                                }}
-                                                className="w-full sm:w-auto"
-                                            >
-                                                <Plus className="mr-2 h-4 w-4" /> Add Event
-                                            </Button>
+                                                <Button
+                                                    onClick={() => {
+                                                        setIsDateSheetOpen(false);
+                                                        setIsAddEventSheetOpen(true);
+                                                    }}
+                                                    className="w-full sm:w-auto"
+                                                >
+                                                    <Plus className="mr-2 h-4 w-4" /> Add Event
+                                                </Button>
                                             )}
                                             <SheetClose asChild>
                                                 <Button variant="outline" className="w-full sm:w-auto">
@@ -767,58 +662,59 @@ export default function Calendar({ events: initialEvents = [] }: CalendarPagePro
                                         <SheetHeader>
                                             <SheetTitle>Add New Event</SheetTitle>
                                             <SheetDescription>
-                                                Fill in the details below to create a new event for {formatSelectedDate()}.
+                                                Fill in the details below to create a new event.
                                             </SheetDescription>
                                         </SheetHeader>
-                                        <div className="grid flex-1 auto-rows-min gap-6 px-4 mt-6">
-                                            <div className="grid gap-3">
-                                                <Label htmlFor="event-title">Event title</Label>
-                                                <Input
-                                                    id="event-title"
-                                                    placeholder="Enter event title"
-                                                    value={eventTitle}
-                                                    onChange={(e) => setEventTitle(e.target.value)}
-                                                />
+                                        <form onSubmit={handleSubmitEvent}>
+                                            <div className="grid flex-1 auto-rows-min gap-6 px-4 mt-6">
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="event_name">Event Title</Label>
+                                                    <Input
+                                                        id="event_name"
+                                                        placeholder="Enter event title"
+                                                        value={data.event_name}
+                                                        onChange={(e) => setData('event_name', e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="event_date">Date</Label>
+                                                    <Input
+                                                        id="event_date"
+                                                        type="date"
+                                                        value={data.event_date}
+                                                        onChange={(e) => setData('event_date', e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="description">Description (optional)</Label>
+                                                    <textarea
+                                                        id="description"
+                                                        placeholder="Enter event description"
+                                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        value={data.description}
+                                                        onChange={(e) => setData('description', e.target.value)}
+                                                    />
+                                                </div>
                                             </div>
-                                            <div className="grid gap-3">
-                                                <Label htmlFor="event-date">Date</Label>
-                                                <Input
-                                                    id="event-date"
-                                                    type="date"
-                                                    value={eventDate || (selectedDateFull ? selectedDateFull.toISOString().split('T')[0] : '')}
-                                                    onChange={(e) => setEventDate(e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="grid gap-3">
-                                                <Label htmlFor="event-description">Description (optional)</Label>
-                                                <textarea
-                                                    id="event-description"
-                                                    placeholder="Enter event description"
-                                                    value={eventDescription}
-                                                    onChange={(e) => setEventDescription(e.target.value)}
-                                                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                />
-                                            </div>
-                                        </div>
-                                        <SheetFooter className="mt-6">
-                                            <Button
-                                                type="submit"
-                                                onClick={handleSaveEvent}
-                                                disabled={loading || !eventTitle || !eventDate}
-                                            >
-                                                {loading ? 'Saving...' : 'Save Event'}
-                                            </Button>
-                                            <SheetClose asChild>
-                                                <Button variant="outline">Cancel</Button>
-                                            </SheetClose>
-                                        </SheetFooter>
+                                            <SheetFooter className="mt-6">
+                                                <Button type="submit" disabled={processing}>
+                                                    {processing ? 'Saving...' : 'Save Event'}
+                                                </Button>
+                                                <SheetClose asChild>
+                                                    <Button variant="outline" type="button">Cancel</Button>
+                                                </SheetClose>
+                                            </SheetFooter>
+                                        </form>
                                     </SheetContent>
                                 </Sheet>
+
                                 {/* Days Header */}
                                 <div className="mb-2 grid grid-cols-7 gap-2 border-b border-border pb-2">
-                                    {dayNames.map((day) => (
+                                    {dayNames.map((day, index) => (
                                         <div
-                                            key={day}
+                                            key={`day-name-${index}-${day}`}
                                             className="text-center text-sm font-semibold text-muted-foreground"
                                         >
                                             {day}

@@ -2,55 +2,69 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CalendarEvents;
+use App\Models\CalendarEvents;  // or CalendarEvents - check your model name
+use App\Models\Appointments;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;  // ADD THIS LINE
 
 class CalendarController extends Controller
 {
     /**
-     * Display the calendar page with events
+     * Display the admin calendar page with both events and appointments
      */
-public function index()
-{
-    $events = CalendarEvents::where('created_by', Auth::id())
-        ->orderBy('event_date', 'asc')
-        ->get()
-        ->map(function ($event) {
-            $eventDate = \Carbon\Carbon::parse($event->event_date);
+    public function index()
+    {
+        // Get all admin events
+        $events = CalendarEvents::orderBy('event_date', 'asc')
+            ->get()
+            ->map(function ($event) {
+                return [
+                    'id' => $event->id,
+                    'name' => $event->event_name,
+                    'date' => $event->event_date,
+                    'description' => $event->description,
+                    'color' => $this->getEventColor($event->id),
+                ];
+            });
 
-            return [
-                'id' => $event->id,
-                'name' => $event->event_name,
-                'date' => $eventDate->format('Y-m-d'),
-                'day' => $eventDate->format('j'),
-                'description' => $event->description,
-                'color' => $this->getEventColor($event->id),
-            ];
-        });
+        // Get all appointments from all schools
+        $appointments = Appointments::with('user:id,name') // Load school name
+            ->orderBy('appointment_date', 'asc')
+            ->get()
+            ->map(function ($appointment) {
+                return [
+                    'id' => $appointment->id,
+                    'name' => $appointment->school_name,
+                    'date' => $appointment->appointment_date->format('Y-m-d'),
+                    'description' => $appointment->reason,
+                    'status' => $appointment->status,
+                    'school_name' => $appointment->user?->name ?? 'Unknown School',
+                    'color' => $this->getAppointmentColor($appointment->id),
+                ];
+            });
 
-    return Inertia::render('admin/calendar', [
-        'events' => $events,
-    ]);
-}
+        return Inertia::render('admin/calendar', [
+            'events' => $events,
+            'appointments' => $appointments,
+        ]);
+    }
 
     /**
-     * Get events for a specific date
+     * Get events for a specific date (optional AJAX endpoint)
      */
     public function getEventsByDate(Request $request)
     {
         $date = $request->input('date');
 
-        $events = CalendarEvents::where('created_by', Auth::id())
-            ->whereDate('event_date', $date)
+        $events = CalendarEvents::whereDate('event_date', $date)
             ->get()
             ->map(function ($event) {
-                $parsed = \Carbon\Carbon::parse($event->event_date);
                 return [
                     'id' => $event->id,
                     'name' => $event->event_name,
-                    'date' => $parsed->format('Y-m-d'),
+                    'date' => $event->event_date->format('Y-m-d'),
                     'description' => $event->description,
                     'color' => $this->getEventColor($event->id),
                 ];
@@ -64,42 +78,32 @@ public function index()
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'event_name' => 'required|string|max:255',
-            'event_date' => 'required|date',
-            'description' => 'nullable|string',
-        ]);
+        try {
+            $validated = $request->validate([
+                'event_name' => 'required|string|max:255',
+                'event_date' => 'required|date',
+                'description' => 'nullable|string',
+            ]);
 
-        $event = CalendarEvents::create([
-            'event_name' => $validated['event_name'],
-            'event_date' => $validated['event_date'],
-            'description' => $validated['description'] ?? null,
-            'created_by' => Auth::id(),
-        ]);
+            $event = CalendarEvents::create([
+                'event_name' => $validated['event_name'],
+                'event_date' => $validated['event_date'],
+                'description' => $validated['description'] ?? null,
+            ]);
 
-        $parsedEventDate = \Carbon\Carbon::parse($event->event_date);
-        return response()->json([
-            'success' => true,
-            'event' => [
-                'id' => $event->id,
-                'name' => $event->event_name,
-                'date' => $parsedEventDate->format('Y-m-d'),
-                'day' => $parsedEventDate->format('j'),
-                'description' => $event->description,
-                'color' => $this->getEventColor($event->id),
-            ],
-        ]);
+            return redirect()->back()->with('success', 'Event created successfully');
+        } catch (\Exception $e) {
+            Log::error('Error creating event: ' . $e->getMessage());
+            return redirect()->back()->withErrors(['error' => 'Failed to create event: ' . $e->getMessage()]);
+        }
     }
 
     /**
      * Update the specified event
      */
-    public function update(Request $request, CalendarEvents $event)
+    public function update(Request $request, $id)
     {
-        // Check if user owns this event
-        if ($event->created_by !== Auth::id()) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
+        $event = CalendarEvents::findOrFail($id);
 
         $validated = $request->validate([
             'event_name' => 'required|string|max:255',
@@ -109,49 +113,56 @@ public function index()
 
         $event->update($validated);
 
-        $parsedEventDate = \Carbon\Carbon::parse($event->event_date);
-        return response()->json([
-            'success' => true,
-            'event' => [
-                'id' => $event->id,
-                'name' => $event->event_name,
-                'date' => $parsedEventDate->format('Y-m-d'),
-                'day' => $parsedEventDate->format('j'),
-                'description' => $event->description,
-                'color' => $this->getEventColor($event->id),
-            ],
-        ]);
+        return redirect()->back()->with('success', 'Event updated successfully');
     }
 
     /**
      * Remove the specified event
      */
-    public function destroy(CalendarEvents $event)
+    public function destroy($id)
     {
-        // Check if user owns this event
-        if ($event->created_by !== Auth::id()) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
-
+        $event = CalendarEvents::findOrFail($id);
         $event->delete();
 
-        return response()->json(['success' => true]);
+        return redirect()->back()->with('success', 'Event deleted successfully');
     }
 
     /**
-     * Get a color for the event based on ID
+     * Delete an appointment (admin can delete any appointment)
+     */
+    public function destroyAppointment($id)
+    {
+        $appointment = Appointments::findOrFail($id);
+        $appointment->delete();
+
+        return redirect()->back()->with('success', 'Appointment deleted successfully');
+    }
+
+    /**
+     * Get a color for events based on ID
      */
     private function getEventColor($id)
     {
         $colors = [
-            'bg-primary',
-            'bg-blue-500',
-            'bg-green-500',
-            'bg-purple-500',
-            'bg-orange-500',
-            'bg-pink-500',
-            'bg-indigo-500',
-            'bg-red-500',
+            'bg-blue-600',
+            'bg-indigo-600',
+            'bg-purple-600',
+            'bg-pink-600',
+        ];
+
+        return $colors[$id % count($colors)];
+    }
+
+    /**
+     * Get a color for appointments based on ID (different from events)
+     */
+    private function getAppointmentColor($id)
+    {
+        $colors = [
+            'bg-green-600',
+            'bg-emerald-600',
+            'bg-teal-600',
+            'bg-cyan-600',
         ];
 
         return $colors[$id % count($colors)];

@@ -6,25 +6,18 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('calendar_events', function (Blueprint $table) {
             $table->id();
             $table->string('event_name');
-            $table->text('description')->nullable()->after('event_date');
-            $table->date('event_date');
-            $table->foreignId('created_by')->constrained('users')->onDelete('cascade');
-            $table->timestamps();
+            $table->date('event_date')->index();
+            $table->text('description')->nullable();
             $table->softDeletes();
+            $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('calendar_events');

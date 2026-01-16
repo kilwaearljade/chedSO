@@ -15,12 +15,18 @@ return new class extends Migration
             $table->id();
             $table->string('school_name');
             $table->date('appointment_date')->index();
-            $table->unsignedInteger('file_count');
-            $table->string('reason')->nullable();
+            $table->unsignedInteger('file_count')->default(0);
+            $table->text('reason')->nullable();
             $table->unsignedBigInteger('assigned_by')->nullable()->index();
-            $table->enum('status', ['pending','cancelled','complete'])->default('pending');
-            $table->softDeletes(); // creates deleted_at
+            $table->enum('status', ['pending', 'cancelled', 'complete'])->default('pending');
+            $table->softDeletes();
             $table->timestamps();
+
+            // Add foreign key constraint with cascade on delete
+            $table->foreign('assigned_by')
+                  ->references('id')
+                  ->on('users')
+                  ->onDelete('cascade');
         });
     }
 

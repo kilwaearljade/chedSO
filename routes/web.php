@@ -46,9 +46,11 @@ Route::middleware(['auth', 'verified', 'authorization:school'])->group(function 
     Route::get('school/dashboard', function () {
         return Inertia::render('school/dashboard');
     })->name('schooldashboard');
+
     Route::get('school/calendar', [SchoolCalendarController::class, 'index'])->name('schoolcalendar');
     Route::get('school/calendar/appointments', [SchoolCalendarController::class, 'getAppointmentsByDate'])->name('schoolcalendar.appointments');
-    Route::post('school/calendar/appointments', [SchoolCalendarController::class, 'store'])->name('schoolcalendar.appointments.store');
+    Route::post('school/calendar/appointments', [SchoolCalendarController::class, 'store'])
+       ->name('schoolcalendar.appointments.store');
     Route::put('school/calendar/appointments/{appointment}', [SchoolCalendarController::class, 'update'])->name('schoolcalendar.appointments.update');
     Route::delete('school/calendar/appointments/{appointment}', [SchoolCalendarController::class, 'destroy'])->name('schoolcalendar.appointments.destroy');
     Route::get('school/feedback', function () {

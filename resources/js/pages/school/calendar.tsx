@@ -1,12 +1,12 @@
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem, type SharedData } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, usePage, router, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Plus, Search, Calendar as CalendarIcon, Clock, Filter } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -28,17 +28,45 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-// Mock appointments data - replace with real data from props/API
-const mockAppointments = [
-    { id: 1, name: 'Sample Appointment', date: 5, color: 'bg-primary' },
-    { id: 2, name: 'Meeting', date: 12, color: 'bg-blue-500' },
-    { id: 3, name: 'Consultation', date: 18, color: 'bg-green-500' },
-    { id: 4, name: 'Review', date: 25, color: 'bg-purple-500' },
-];
+interface Appointment {
+    id: number;
+    name: string;
+    date: string; // 'Y-m-d' format
+    day: number;
+    description: string | null;
+    status: string;
+    color: string;
+    file_count: number;
+    daily_file_count: number | null;
+    is_split: boolean;
+    split_sequence: number | null;
+    total_splits: number | null;
+    parent_appointment_id: number | null;
+}
 
-export default function Calendar() {
+interface CalendarEvent {
+    id: number;
+    name: string;
+    date: string; // 'Y-m-d' format
+    description: string | null;
+    color: string;
+    type: 'event' | 'appointment';
+}
+
+interface CalendarProps {
+    appointments: Appointment[];
+    events: CalendarEvent[];
+}
+
+export default function Calendar({ appointments = [], events = [] }: CalendarProps) {
     const { auth } = usePage<SharedData>().props;
     const isSchool = auth.user.role === 'school';
+
+    // Combine appointments and events into one array
+    const allItems = [
+        ...appointments.map(a => ({ ...a, type: 'appointment' as const })),
+        ...events.map(e => ({ ...e, type: 'event' as const, status: undefined }))
+    ];
 
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date().getDate());
@@ -47,14 +75,29 @@ export default function Calendar() {
     const [isAddAppointmentSheetOpen, setIsAddAppointmentSheetOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
+    // Form for creating appointments
+    const { data, setData, post, processing, reset } = useForm({
+        school_name: '',
+        appointment_date: '',
+        reason: '',
+        file_count: 1,
+    });
+
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dayNamesShort = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    const dayNamesShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+
+    // Set default date when selectedDateFull changes
+    useEffect(() => {
+        if (selectedDateFull) {
+            setData('appointment_date', selectedDateFull.toISOString().split('T')[0]);
+        }
+    }, [selectedDateFull]);
 
     const navigateMonth = (direction: 'prev' | 'next') => {
         setCurrentDate(new Date(currentYear, currentMonth + (direction === 'next' ? 1 : -1), 1));
@@ -66,15 +109,14 @@ export default function Calendar() {
         setSelectedDate(today.getDate());
     };
 
-    const getAppointmentsForDate = (date: number, month?: number, year?: number) => {
-        // For now, filter by date number only (mock data limitation)
-        // In production, filter by full date (year, month, day)
-        return mockAppointments.filter(appointment => appointment.date === date);
+    const getAppointmentsForDate = (dateObj: Date) => {
+        const dateString = dateObj.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        return allItems.filter(item => item.date === dateString);
     };
 
     const handleDateClick = (day: number, monthOffset: number = 0) => {
         const newDate = new Date(currentYear, currentMonth + monthOffset, day);
-        setCurrentDate(newDate);
+        setCurrentDate(new Date(currentYear, currentMonth + monthOffset, 1));
         setSelectedDate(day);
         setSelectedDateFull(newDate);
         setIsDateSheetOpen(true);
@@ -82,13 +124,55 @@ export default function Calendar() {
 
     const getSelectedDateAppointments = () => {
         if (!selectedDateFull) return [];
-        return getAppointmentsForDate(selectedDateFull.getDate(), selectedDateFull.getMonth(), selectedDateFull.getFullYear());
+        return getAppointmentsForDate(selectedDateFull);
     };
 
     const formatSelectedDate = () => {
         if (!selectedDateFull) return '';
         return `${monthNames[selectedDateFull.getMonth()]} ${selectedDateFull.getDate()}, ${selectedDateFull.getFullYear()}`;
     };
+
+    const handleSubmitAppointment = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        console.log('Submitting appointment:', data);
+
+        // Use direct URL instead of route helper
+        post('/school/calendar/appointments', {
+            onSuccess: () => {
+                console.log('Appointment created successfully!');
+                reset();
+                setIsAddAppointmentSheetOpen(false);
+                router.reload();
+            },
+            onError: (errors) => {
+                console.error('Validation errors:', errors);
+                alert('Error: ' + JSON.stringify(errors));
+            },
+        });
+    };
+
+    const handleDeleteAppointment = (appointmentId: number) => {
+        if (confirm('Are you sure you want to delete this appointment?')) {
+            // Use direct URL instead of route helper
+            router.delete(`/school/calendar/appointments/${appointmentId}`, {
+                onSuccess: () => {
+                    console.log('Appointment deleted successfully!');
+                    router.reload();
+                },
+                onError: (errors) => {
+                    console.error('Delete error:', errors);
+                    alert('Error deleting appointment');
+                },
+            });
+        }
+    };
+
+    // Filter items based on search query
+    const filteredItems = allItems.filter(item =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
     const renderCalendarDays = () => {
         const days = [];
@@ -99,14 +183,12 @@ export default function Calendar() {
         const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
         const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
 
-        // Days from previous month (before the first day of current month)
+        // Days from previous month
         for (let i = 0; i < firstDayOfMonth; i++) {
             const day = daysInPrevMonth - firstDayOfMonth + i + 1;
             const date = new Date(prevYear, prevMonth, day);
-            const isToday = date.getDate() === new Date().getDate() &&
-                           date.getMonth() === new Date().getMonth() &&
-                           date.getFullYear() === new Date().getFullYear();
-            const appointments = getAppointmentsForDate(day);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const dayAppointments = getAppointmentsForDate(date);
 
             days.push(
                 <div
@@ -127,18 +209,18 @@ export default function Calendar() {
                         )}
                     </div>
                     <div className="space-y-1">
-                        {appointments.slice(0, 2).map((appointment) => (
+                        {dayAppointments.slice(0, 2).map((item) => (
                             <div
-                                key={appointment.id}
-                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${appointment.color}`}
-                                title={appointment.name}
+                                key={`${item.type}-${item.id}`}
+                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${item.color}`}
+                                title={item.name}
                             >
-                                {appointment.name}
+                                {item.name}
                             </div>
                         ))}
-                        {appointments.length > 2 && (
+                        {dayAppointments.length > 2 && (
                             <div className="text-xs text-muted-foreground font-medium">
-                                +{appointments.length - 2} more
+                                +{dayAppointments.length - 2} more
                             </div>
                         )}
                     </div>
@@ -148,9 +230,10 @@ export default function Calendar() {
 
         // Days of the current month
         for (let day = 1; day <= daysInMonth; day++) {
-            const isToday = day === new Date().getDate() && currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear();
-            const isSelected = day === selectedDate;
-            const appointments = getAppointmentsForDate(day);
+            const date = new Date(currentYear, currentMonth, day);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
+            const dayAppointments = getAppointmentsForDate(date);
 
             days.push(
                 <div
@@ -171,18 +254,18 @@ export default function Calendar() {
                         )}
                     </div>
                     <div className="space-y-1">
-                        {appointments.slice(0, 2).map((appointment) => (
+                        {dayAppointments.slice(0, 2).map((item) => (
                             <div
-                                key={appointment.id}
-                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${appointment.color}`}
-                                title={appointment.name}
+                                key={`${item.type}-${item.id}`}
+                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${item.color}`}
+                                title={item.name}
                             >
-                                {appointment.name}
+                                {item.name}
                             </div>
                         ))}
-                        {appointments.length > 2 && (
+                        {dayAppointments.length > 2 && (
                             <div className="text-xs text-muted-foreground font-medium">
-                                +{appointments.length - 2} more
+                                +{dayAppointments.length - 2} more
                             </div>
                         )}
                     </div>
@@ -190,17 +273,15 @@ export default function Calendar() {
             );
         }
 
-        // Days from next month (to complete the grid)
+        // Days from next month
         const remainingCells = totalCells - days.length;
         for (let i = 1; i <= remainingCells; i++) {
             const day = i;
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
             const date = new Date(nextYear, nextMonth, day);
-            const isToday = date.getDate() === new Date().getDate() &&
-                           date.getMonth() === new Date().getMonth() &&
-                           date.getFullYear() === new Date().getFullYear();
-            const appointments = getAppointmentsForDate(day);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const dayAppointments = getAppointmentsForDate(date);
 
             days.push(
                 <div
@@ -221,18 +302,18 @@ export default function Calendar() {
                         )}
                     </div>
                     <div className="space-y-1">
-                        {appointments.slice(0, 2).map((appointment) => (
+                        {dayAppointments.slice(0, 2).map((item) => (
                             <div
-                                key={appointment.id}
-                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${appointment.color}`}
-                                title={appointment.name}
+                                key={`${item.type}-${item.id}`}
+                                className={`truncate rounded px-2 py-1 text-xs font-medium text-white ${item.color}`}
+                                title={item.name}
                             >
-                                {appointment.name}
+                                {item.name}
                             </div>
                         ))}
-                        {appointments.length > 2 && (
+                        {dayAppointments.length > 2 && (
                             <div className="text-xs text-muted-foreground font-medium">
-                                +{appointments.length - 2} more
+                                +{dayAppointments.length - 2} more
                             </div>
                         )}
                     </div>
@@ -248,7 +329,6 @@ export default function Calendar() {
         const firstDay = new Date(currentYear, currentMonth, 1).getDay();
         const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-        // Calculate previous month's last days
         const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
         const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
         const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
@@ -257,10 +337,8 @@ export default function Calendar() {
         for (let i = 0; i < firstDay; i++) {
             const day = daysInPrevMonth - firstDay + i + 1;
             const date = new Date(prevYear, prevMonth, day);
-            const isToday = date.getDate() === new Date().getDate() &&
-                           date.getMonth() === new Date().getMonth() &&
-                           date.getFullYear() === new Date().getFullYear();
-            const hasAppointment = mockAppointments.some(appointment => appointment.date === day);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const hasAppointment = getAppointmentsForDate(date).length > 0;
 
             miniDays.push(
                 <button
@@ -282,9 +360,10 @@ export default function Calendar() {
 
         // Days of current month
         for (let day = 1; day <= lastDate; day++) {
-            const hasAppointment = mockAppointments.some(appointment => appointment.date === day);
-            const isToday = day === new Date().getDate() && currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear();
-            const isSelected = day === selectedDate;
+            const date = new Date(currentYear, currentMonth, day);
+            const hasAppointment = getAppointmentsForDate(date).length > 0;
+            const isToday = date.toDateString() === new Date().toDateString();
+            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
 
             miniDays.push(
                 <button
@@ -308,7 +387,7 @@ export default function Calendar() {
             );
         }
 
-        // Days from next month (to complete the grid - only fill to complete weeks)
+        // Days from next month
         const totalDaysShown = firstDay + lastDate;
         const remainingCells = Math.ceil(totalDaysShown / 7) * 7 - totalDaysShown;
         for (let i = 1; i <= remainingCells; i++) {
@@ -316,10 +395,8 @@ export default function Calendar() {
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
             const date = new Date(nextYear, nextMonth, day);
-            const isToday = date.getDate() === new Date().getDate() &&
-                           date.getMonth() === new Date().getMonth() &&
-                           date.getFullYear() === new Date().getFullYear();
-            const hasAppointment = mockAppointments.some(appointment => appointment.date === day);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const hasAppointment = getAppointmentsForDate(date).length > 0;
 
             miniDays.push(
                 <button
@@ -341,6 +418,12 @@ export default function Calendar() {
 
         return miniDays;
     };
+
+    // Get upcoming items sorted by date
+    const upcomingItems = filteredItems
+        .filter(item => new Date(item.date) >= new Date(new Date().setHours(0, 0, 0, 0)))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 5);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -373,8 +456,8 @@ export default function Calendar() {
                                 {/* Mini Calendar */}
                                 <div>
                                     <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted-foreground">
-                                        {dayNamesShort.map((day) => (
-                                            <div key={day} className="h-8 flex items-center justify-center">
+                                        {dayNamesShort.map((day, index) => (
+                                            <div key={`day-header-${index}-${day}`} className="h-8 flex items-center justify-center">
                                                 {day}
                                             </div>
                                         ))}
@@ -396,29 +479,47 @@ export default function Calendar() {
                                     />
                                 </div>
 
-                                {/* Upcoming Appointments */}
+                                {/* Upcoming Items */}
                                 <div>
                                     <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
                                         <Filter className="h-4 w-4" />
-                                        Upcoming Appointments
+                                        Upcoming Items
                                     </h3>
                                     <div className="space-y-2">
-                                        {mockAppointments.map((appointment) => (
-                                            <div
-                                                key={appointment.id}
-                                                className="flex items-center gap-2 rounded-lg border border-border bg-card p-2"
-                                            >
-                                                <div className={`h-2 w-2 rounded-full ${appointment.color}`} />
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium text-foreground truncate">
-                                                        {appointment.name}
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {monthNames[currentMonth]} {appointment.date}, {currentYear}
-                                                    </p>
+                                        {upcomingItems.length > 0 ? (
+                                            upcomingItems.map((item) => (
+                                                <div
+                                                    key={`${item.type}-${item.id}`}
+                                                    className="flex items-center gap-2 rounded-lg border border-border bg-card p-2 cursor-pointer hover:bg-muted/50"
+                                                    onClick={() => {
+                                                        const itemDate = new Date(item.date);
+                                                        setCurrentDate(new Date(itemDate.getFullYear(), itemDate.getMonth(), 1));
+                                                        setSelectedDate(itemDate.getDate());
+                                                        setSelectedDateFull(itemDate);
+                                                        setIsDateSheetOpen(true);
+                                                    }}
+                                                >
+                                                    <div className={`h-2 w-2 rounded-full ${item.color}`} />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-sm font-medium text-foreground truncate">
+                                                                {item.name}
+                                                            </p>
+                                                            <Badge variant={item.type === 'event' ? 'default' : 'secondary'} className="h-5 px-1.5 text-xs">
+                                                                {item.type}
+                                                            </Badge>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {new Date(item.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground text-center py-4">
+                                                {searchQuery ? 'No items found' : 'No upcoming items'}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </CardContent>
@@ -459,52 +560,15 @@ export default function Calendar() {
                                     </CardTitle>
 
                                     {isSchool && (
-                                        <Sheet open={isAddAppointmentSheetOpen} onOpenChange={setIsAddAppointmentSheetOpen}>
-                                            <SheetTrigger asChild>
-                                                <Button variant="outline"><Plus className="mr-2 h-4 w-4" /> Add Appointment</Button>
-                                            </SheetTrigger>
-                                            <SheetContent className="overflow-auto">
-                                                <SheetHeader>
-                                                    <SheetTitle>Add New Appointment</SheetTitle>
-                                                    <SheetDescription>
-                                                        Fill in the details below to create a new appointment.
-                                                    </SheetDescription>
-                                                </SheetHeader>
-                                                <div className="grid flex-1 auto-rows-min gap-6 px-4 mt-6">
-                                                    <div className="grid gap-3">
-                                                        <Label htmlFor="add-appointment-title">Appointment title</Label>
-                                                        <Input id="add-appointment-title" placeholder="Enter appointment title" />
-                                                    </div>
-                                                    <div className="grid gap-3">
-                                                        <Label htmlFor="add-appointment-date">Date</Label>
-                                                        <Input
-                                                            id="add-appointment-date"
-                                                            type="date"
-                                                            defaultValue={selectedDateFull ? selectedDateFull.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
-                                                        />
-                                                    </div>
-                                                    <div className="grid gap-3">
-                                                        <Label htmlFor="add-appointment-description">Description (optional)</Label>
-                                                        <textarea
-                                                            id="add-appointment-description"
-                                                            placeholder="Enter appointment description"
-                                                            className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <SheetFooter className="mt-6">
-                                                    <Button type="submit" onClick={() => {
-                                                        // Handle save appointment logic here
-                                                        setIsAddAppointmentSheetOpen(false);
-                                                    }}>
-                                                        Save Appointment
-                                                    </Button>
-                                                    <SheetClose asChild>
-                                                        <Button variant="outline">Cancel</Button>
-                                                    </SheetClose>
-                                                </SheetFooter>
-                                            </SheetContent>
-                                        </Sheet>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                setSelectedDateFull(new Date());
+                                                setIsAddAppointmentSheetOpen(true);
+                                            }}
+                                        >
+                                            <Plus className="mr-2 h-4 w-4" /> Add Appointment
+                                        </Button>
                                     )}
                                 </div>
                             </CardHeader>
@@ -514,31 +578,68 @@ export default function Calendar() {
                                     <SheetContent className="overflow-auto">
                                         <SheetHeader>
                                             <SheetTitle>
-                                                Appointments and Schedule for {formatSelectedDate()}
+                                                Schedule for {formatSelectedDate()}
                                             </SheetTitle>
                                             <SheetDescription>
                                                 {getSelectedDateAppointments().length > 0
-                                                    ? `You have ${getSelectedDateAppointments().length} appointment(s) on this date.`
-                                                    : 'No appointments scheduled for this date.'}
+                                                    ? `${getSelectedDateAppointments().length} item(s) on this date.`
+                                                    : 'No items scheduled for this date.'}
                                             </SheetDescription>
                                         </SheetHeader>
                                         <div className="mt-6 space-y-4">
                                             {getSelectedDateAppointments().length > 0 ? (
                                                 <div className="space-y-3">
-                                                    {getSelectedDateAppointments().map((appointment) => (
+                                                    {getSelectedDateAppointments().map((item) => (
                                                         <div
-                                                            key={appointment.id}
+                                                            key={`${item.type}-${item.id}`}
                                                             className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 hover:bg-muted/50 transition-colors"
                                                         >
-                                                            <div className={`h-3 w-3 rounded-full mt-1.5 ${appointment.color}`} />
+                                                            <div className={`h-3 w-3 rounded-full mt-1.5 ${item.color}`} />
                                                             <div className="flex-1 min-w-0">
-                                                                <h4 className="text-sm font-semibold text-foreground">
-                                                                    {appointment.name}
-                                                                </h4>
-                                                                <p className="text-xs text-muted-foreground mt-1">
-                                                                    {formatSelectedDate()}
-                                                                </p>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <h4 className="text-sm font-semibold text-foreground">
+                                                                        {item.name}
+                                                                    </h4>
+                                                                    <Badge variant={item.type === 'event' ? 'default' : 'secondary'} className="h-5 px-1.5 text-xs">
+                                                                        {item.type}
+                                                                    </Badge>
+                                                                </div>
+                                                                {item.description && (
+                                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                                        {item.description}
+                                                                    </p>
+                                                                )}
+                                                                {item.status && (
+                                                                    <Badge variant="outline" className="mt-2">
+                                                                        {item.status}
+                                                                    </Badge>
+                                                                )}
+                                                                {item.type === 'appointment' && item.is_split && (
+                                                                    <div className="mt-2 space-y-1">
+                                                                        <Badge variant="secondary" className="text-xs">
+                                                                            Split {item.split_sequence}/{item.total_splits}
+                                                                        </Badge>
+                                                                        <p className="text-xs text-muted-foreground">
+                                                                            📁 {item.daily_file_count} files (of {item.file_count} total)
+                                                                        </p>
+                                                                    </div>
+                                                                )}
+                                                                {item.type === 'appointment' && !item.is_split && item.file_count && (
+                                                                    <p className="text-xs text-muted-foreground mt-2">
+                                                                        📁 {item.file_count} files
+                                                                    </p>
+                                                                )}
                                                             </div>
+                                                            {isSchool && item.type === 'appointment' && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => handleDeleteAppointment(item.id)}
+                                                                    className="text-destructive hover:text-destructive"
+                                                                >
+                                                                    Delete
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     ))}
                                                 </div>
@@ -578,50 +679,74 @@ export default function Calendar() {
                                         <SheetHeader>
                                             <SheetTitle>Add New Appointment</SheetTitle>
                                             <SheetDescription>
-                                                Fill in the details below to create a new appointment for {formatSelectedDate()}.
+                                                Fill in the details below to create a new appointment.
                                             </SheetDescription>
                                         </SheetHeader>
-                                        <div className="grid flex-1 auto-rows-min gap-6 px-4 mt-6">
-                                            <div className="grid gap-3">
-                                                <Label htmlFor="appointment-title">Appointment title</Label>
-                                                <Input id="appointment-title" placeholder="Enter appointment title" />
+                                        <form onSubmit={handleSubmitAppointment}>
+                                            <div className="grid flex-1 auto-rows-min gap-6 px-4 mt-6">
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="school_name">Appointment Title</Label>
+                                                    <Input
+                                                        id="school_name"
+                                                        placeholder="Enter appointment title"
+                                                        value={data.school_name}
+                                                        onChange={(e) => setData('school_name', e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="appointment_date">Date</Label>
+                                                    <Input
+                                                        id="appointment_date"
+                                                        type="date"
+                                                        value={data.appointment_date}
+                                                        onChange={(e) => setData('appointment_date', e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="reason">Description (optional)</Label>
+                                                    <textarea
+                                                        id="reason"
+                                                        placeholder="Enter appointment description"
+                                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        value={data.reason}
+                                                        onChange={(e) => setData('reason', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="file_count">Number of Files</Label>
+                                                    <Input
+                                                        id="file_count"
+                                                        type="number"
+                                                        min="1"
+                                                        placeholder="Enter number of files"
+                                                        value={data.file_count}
+                                                        onChange={(e) => setData('file_count', parseInt(e.target.value) || 1)}
+                                                        required
+                                                    />
+                                                    <p className="text-xs text-muted-foreground">
+                                                        ℹ️ If over 200 files, appointments will be automatically split across multiple days (max 200/day, skipping weekends)
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="grid gap-3">
-                                                <Label htmlFor="appointment-date">Date</Label>
-                                                <Input
-                                                    id="appointment-date"
-                                                    type="date"
-                                                    defaultValue={selectedDateFull ? selectedDateFull.toISOString().split('T')[0] : ''}
-                                                />
-                                            </div>
-                                            <div className="grid gap-3">
-                                                <Label htmlFor="appointment-description">Description (optional)</Label>
-                                                <textarea
-                                                    id="appointment-description"
-                                                    placeholder="Enter appointment description"
-                                                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                />
-                                            </div>
-                                        </div>
-                                        <SheetFooter className="mt-6">
-                                            <Button type="submit" onClick={() => {
-                                                // Handle save appointment logic here
-                                                setIsAddAppointmentSheetOpen(false);
-                                            }}>
-                                                Save Appointment
-                                            </Button>
-                                            <SheetClose asChild>
-                                                <Button variant="outline">Cancel</Button>
-                                            </SheetClose>
-                                        </SheetFooter>
+                                            <SheetFooter className="mt-6">
+                                                <Button type="submit" disabled={processing}>
+                                                    {processing ? 'Saving...' : 'Save Appointment'}
+                                                </Button>
+                                                <SheetClose asChild>
+                                                    <Button variant="outline" type="button">Cancel</Button>
+                                                </SheetClose>
+                                            </SheetFooter>
+                                        </form>
                                     </SheetContent>
                                 </Sheet>
 
                                 {/* Days Header */}
                                 <div className="mb-2 grid grid-cols-7 gap-2 border-b border-border pb-2">
-                                    {dayNames.map((day) => (
+                                    {dayNames.map((day, index) => (
                                         <div
-                                            key={day}
+                                            key={`day-name-${index}-${day}`}
                                             className="text-center text-sm font-semibold text-muted-foreground"
                                         >
                                             {day}

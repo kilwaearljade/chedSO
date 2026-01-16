@@ -13,15 +13,14 @@ class CalendarEvents extends Model
     protected $fillable = [
         'event_name',
         'event_date',
-        'description',
-        'created_by',
+        'description'
     ];
 
     protected $dates = [
-        'event_date',
-        'deleted_at',
-        'created_at',
-        'updated_at',
+        'event_date' => 'date',
+        'deleted_at' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime'
     ];
 
     public function creator()
