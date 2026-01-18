@@ -792,9 +792,9 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                 </div>
                                             </div>
                                             <SheetFooter className="mt-6">
-                                                <Button 
-                                                    type="submit" 
-                                                    disabled={processing || (data.appointment_date && hasEventOnDate(data.appointment_date))}
+                                                <Button
+                                                    type="submit"
+                                                    disabled={processing || (!!data.appointment_date && hasEventOnDate(data.appointment_date))}
                                                 >
                                                     {processing ? 'Saving...' : 'Save Appointment'}
                                                 </Button>
