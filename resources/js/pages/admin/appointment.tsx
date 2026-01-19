@@ -1,49 +1,27 @@
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Search, Filter, Calendar, FileText, Building2, MoreVertical } from 'lucide-react';
+import { Search, Filter, Calendar, FileText, Building2, MoreVertical, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+declare function route(name: string, params?: any): string;
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Appointment',
         href: dashboard().url,
-    },
-];
-
-// Mock appointments data - replace with real data from props/API
-const appointments = [
-    {
-        id: 1,
-        schoolName: 'Sample School Name',
-        appointmentDate: 'Jan 01, 2026',
-        fileCount: 3,
-        status: 'pending',
-    },
-    {
-        id: 2,
-        schoolName: 'Another School',
-        appointmentDate: 'Jan 15, 2026',
-        fileCount: 5,
-        status: 'complete',
-    },
-    {
-        id: 3,
-        schoolName: 'High School XYZ',
-        appointmentDate: 'Feb 01, 2026',
-        fileCount: 2,
-        status: 'pending',
-    },
-    {
-        id: 4,
-        schoolName: 'Elementary School ABC',
-        appointmentDate: 'Dec 20, 2025',
-        fileCount: 8,
-        status: 'cancelled',
     },
 ];
 
@@ -65,18 +43,148 @@ const statusConfig = {
     },
 };
 
-export default function Appointment() {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<string>('all');
-    const [dateFilter, setDateFilter] = useState('');
+interface User {
+    id: number;
+    name: string;
+    profile_photo_path?: string;
+}
 
-    const filteredAppointments = appointments.filter((appointment) => {
-        const matchesSearch = appointment.schoolName.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter;
-        const matchesDate = !dateFilter || appointment.appointmentDate.includes(dateFilter);
-        
-        return matchesSearch && matchesStatus && matchesDate;
-    });
+interface Appointment {
+    id: number;
+    school_name: string;
+    appointment_date: string;
+    file_count: number;
+    status: 'pending' | 'complete' | 'cancelled';
+    reason?: string;
+    user?: User;
+}
+
+interface AppointmentProps {
+    appointments: {
+        data: Appointment[];
+        current_page: number;
+        last_page: number;
+        total: number;
+        per_page: number;
+    };
+    filters: {
+        search: string;
+        status: string;
+        date: string;
+    };
+}
+
+export default function Appointment({ appointments, filters }: AppointmentProps) {
+    const [searchQuery, setSearchQuery] = useState(filters?.search || '');
+    const [statusFilter, setStatusFilter] = useState<string>(filters?.status || 'all');
+    const [dateFilter, setDateFilter] = useState(filters?.date || '');
+
+    const handleFilter = () => {
+        router.get(
+            route('appointment.index'),
+            {
+                search: searchQuery || undefined,
+                status: statusFilter !== 'all' ? statusFilter : undefined,
+                date: dateFilter || undefined,
+            },
+            { preserveState: true, preserveScroll: true }
+        );
+    };
+
+    const handleStatusUpdate = (appointmentId: number, newStatus: string) => {
+        router.patch(
+            route('appointment.status', appointmentId),
+            { status: newStatus },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                onError: (errors) => {
+                    console.error('Failed to update status:', errors);
+                },
+            }
+        );
+    };
+
+    const handleApprove = (appointmentId: number) => {
+        if (confirm('Are you sure you want to approve this appointment?')) {
+            router.patch(
+                route('appointment.approve', appointmentId),
+                {},
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    onError: (errors) => {
+                        console.error('Failed to approve:', errors);
+                    },
+                }
+            );
+        }
+    };
+
+    const handleDecline = (appointmentId: number) => {
+        if (confirm('Are you sure you want to decline this appointment?')) {
+            router.patch(
+                route('appointment.decline', appointmentId),
+                {},
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    onError: (errors) => {
+                        console.error('Failed to decline:', errors);
+                    },
+                }
+            );
+        }
+    };
+
+    const handleDelete = (appointmentId: number) => {
+        if (confirm('Are you sure you want to delete this appointment?')) {
+            router.delete(
+                route('appointment.destroy', appointmentId),
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    onError: (errors) => {
+                        console.error('Failed to delete:', errors);
+                    },
+                }
+            );
+        }
+    };
+
+    const handlePrevious = () => {
+        if (appointments.current_page > 1) {
+            router.get(
+                route('appointment.index'),
+                {
+                    search: searchQuery || undefined,
+                    status: statusFilter !== 'all' ? statusFilter : undefined,
+                    date: dateFilter || undefined,
+                    page: appointments.current_page - 1,
+                },
+                { preserveState: true }
+            );
+        }
+    };
+
+    const handleNext = () => {
+        if (appointments.current_page < appointments.last_page) {
+            router.get(
+                route('appointment.index'),
+                {
+                    search: searchQuery || undefined,
+                    status: statusFilter !== 'all' ? statusFilter : undefined,
+                    date: dateFilter || undefined,
+                    page: appointments.current_page + 1,
+                },
+                { preserveState: true }
+            );
+        }
+    };
+
+    const handleViewDetails = (appointmentId: number) => {
+        router.visit(route('appointment.show', appointmentId));
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -113,6 +221,7 @@ export default function Appointment() {
                                     placeholder="Search school name..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
                                     className="w-full pl-10 pr-4 py-2 rounded-lg bg-muted/50 border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                                 />
                             </div>
@@ -120,7 +229,18 @@ export default function Appointment() {
                             {/* Status Filter */}
                             <select
                                 value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
+                                onChange={(e) => {
+                                    setStatusFilter(e.target.value);
+                                    router.get(
+                                        route('appointment.index'),
+                                        {
+                                            search: searchQuery || undefined,
+                                            status: e.target.value !== 'all' ? e.target.value : undefined,
+                                            date: dateFilter || undefined,
+                                        },
+                                        { preserveState: true }
+                                    );
+                                }}
                                 className="w-full px-4 py-2 rounded-lg bg-muted/50 border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                             >
                                 <option value="all">All Status</option>
@@ -133,7 +253,18 @@ export default function Appointment() {
                             <input
                                 type="date"
                                 value={dateFilter}
-                                onChange={(e) => setDateFilter(e.target.value)}
+                                onChange={(e) => {
+                                    setDateFilter(e.target.value);
+                                    router.get(
+                                        route('appointment.index'),
+                                        {
+                                            search: searchQuery || undefined,
+                                            status: statusFilter !== 'all' ? statusFilter : undefined,
+                                            date: e.target.value || undefined,
+                                        },
+                                        { preserveState: true }
+                                    );
+                                }}
                                 className="w-full px-4 py-2 rounded-lg bg-muted/50 border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                             />
                         </div>
@@ -141,44 +272,107 @@ export default function Appointment() {
                 </Card>
 
                 {/* Appointments Grid */}
-                {filteredAppointments.length > 0 ? (
+                {appointments.data.length > 0 ? (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {filteredAppointments.map((appointment) => {
-                            const status = statusConfig[appointment.status as keyof typeof statusConfig];
-                            
+                        {appointments.data.map((appointment) => {
+                            const status = statusConfig[appointment.status];
+
                             return (
-                                <Card key={appointment.id} className="hover:shadow-md transition-shadow">
+                                <Card key={appointment.id} className="hover:shadow-md transition-shadow flex flex-col">
                                     <CardHeader>
                                         <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-2 rounded-lg bg-primary/10">
-                                                    <Building2 className="h-5 w-5 text-primary" />
+                                            <div className="flex items-center gap-3 flex-1">
+                                                <div className="relative flex-shrink-0">
+                                                    {appointment.user?.profile_photo_path ? (
+                                                        <img
+                                                            src={`/storage/${appointment.user.profile_photo_path}`}
+                                                            alt={appointment.user.name}
+                                                            className="h-10 w-10 rounded-full object-cover border-2 border-primary/20"
+                                                        />
+                                                    ) : (
+                                                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                                            <Building2 className="h-5 w-5 text-primary" />
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <CardTitle className="text-lg line-clamp-1">
-                                                        {appointment.schoolName}
+                                                        {appointment.user?.name || appointment.school_name}
                                                     </CardTitle>
                                                     <CardDescription className="mt-1">
                                                         Appointment #{appointment.id}
                                                     </CardDescription>
                                                 </div>
                                             </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8"
-                                            >
-                                                <MoreVertical className="h-4 w-4" />
-                                            </Button>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 flex-shrink-0"
+                                                    >
+                                                        <MoreVertical className="h-4 w-4" />
+                                                        <span className="sr-only">Open menu</span>
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleApprove(appointment.id)}
+                                                        disabled={appointment.status === 'complete'}
+                                                        className="text-green-600"
+                                                    >
+                                                        Approve
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleDecline(appointment.id)}
+                                                        disabled={appointment.status === 'cancelled'}
+                                                        className="text-red-600"
+                                                    >
+                                                        Decline
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleStatusUpdate(appointment.id, 'pending')}
+                                                        disabled={appointment.status === 'pending'}
+                                                    >
+                                                        Mark as Pending
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleStatusUpdate(appointment.id, 'complete')}
+                                                        disabled={appointment.status === 'complete'}
+                                                    >
+                                                        Mark as Complete
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleStatusUpdate(appointment.id, 'cancelled')}
+                                                        disabled={appointment.status === 'cancelled'}
+                                                    >
+                                                        Mark as Cancelled
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleDelete(appointment.id)}
+                                                        className="text-red-600"
+                                                    >
+                                                        Delete
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </CardHeader>
-                                    <CardContent className="space-y-4">
+                                    <CardContent className="space-y-4 flex-1">
                                         {/* Appointment Date */}
                                         <div className="flex items-center gap-3 text-sm">
-                                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                                            <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                             <div>
                                                 <p className="font-medium text-foreground">
-                                                    {appointment.appointmentDate}
+                                                    {new Date(appointment.appointment_date).toLocaleDateString('en-US', {
+                                                        year: 'numeric',
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                    })}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground">
                                                     Appointment Date
@@ -188,10 +382,10 @@ export default function Appointment() {
 
                                         {/* File Count */}
                                         <div className="flex items-center gap-3 text-sm">
-                                            <FileText className="h-4 w-4 text-muted-foreground" />
+                                            <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                             <div>
                                                 <p className="font-medium text-foreground">
-                                                    {appointment.fileCount} {appointment.fileCount === 1 ? 'file' : 'files'}
+                                                    {appointment.file_count} {appointment.file_count === 1 ? 'file' : 'files'}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground">
                                                     Total files
@@ -213,12 +407,9 @@ export default function Appointment() {
                                         <Button
                                             variant="outline"
                                             className="w-full"
-                                            onClick={() => {
-                                                // Handle update action
-                                                console.log('Update appointment:', appointment.id);
-                                            }}
+                                            onClick={() => handleViewDetails(appointment.id)}
                                         >
-                                            Update Status
+                                            View Details
                                         </Button>
                                     </CardFooter>
                                 </Card>
@@ -243,19 +434,31 @@ export default function Appointment() {
                     </Card>
                 )}
 
-                {/* Pagination Placeholder */}
-                {filteredAppointments.length > 0 && (
+                {/* Pagination */}
+                {appointments.data.length > 0 && (
                     <Card>
                         <CardContent className="flex items-center justify-between py-4">
                             <p className="text-sm text-muted-foreground">
-                                Showing {filteredAppointments.length} of {appointments.length} appointments
+                                Showing page {appointments.current_page} of {appointments.last_page} ({appointments.total} total)
                             </p>
                             <div className="flex items-center gap-2">
-                                <Button variant="outline" size="sm" disabled>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handlePrevious}
+                                    disabled={appointments.current_page === 1}
+                                >
+                                    <ChevronLeft className="h-4 w-4 mr-2" />
                                     Previous
                                 </Button>
-                                <Button variant="outline" size="sm" disabled>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleNext}
+                                    disabled={appointments.current_page === appointments.last_page}
+                                >
                                     Next
+                                    <ChevronRight className="h-4 w-4 ml-2" />
                                 </Button>
                             </div>
                         </CardContent>

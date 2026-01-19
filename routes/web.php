@@ -7,6 +7,7 @@ use App\Http\Controllers\SchoolFeedBack;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\SchoolCalendarController;
+use App\Http\Controllers\Appointments;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -17,8 +18,6 @@ Route::get('/', function () {
     ]);
 })->middleware('guest')->name('home');
 
-
-
 // Admin Routes
 Route::middleware(['auth', 'verified', 'authorization:admin'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'admin'])->name('dashboard');
@@ -27,9 +26,13 @@ Route::middleware(['auth', 'verified', 'authorization:admin'])->group(function (
     Route::post('calendar/events', [CalendarController::class, 'store'])->name('calendar.events.store');
     Route::put('calendar/events/{event}', [CalendarController::class, 'update'])->name('calendar.events.update');
     Route::delete('calendar/events/{event}', [CalendarController::class, 'destroy'])->name('calendar.events.destroy');
-    Route::get('appointment', function () {
-        return Inertia::render('admin/appointment');
-    })->name('appointment');
+    Route::get('appointment', [Appointments::class, 'index'])->name('appointment.index');
+    Route::post('appointment', [Appointments::class, 'store'])->name('appointment.store');
+    Route::put('appointment/{appointment}', [Appointments::class, 'update'])->name('appointment.update');
+    Route::patch('appointment/{appointment}/status', [Appointments::class, 'updateStatus'])->name('appointment.status');
+    Route::patch('appointment/{appointment}/approve', [Appointments::class, 'approve'])->name('appointment.approve');
+    Route::patch('appointment/{appointment}/decline', [Appointments::class, 'decline'])->name('appointment.decline');
+    Route::delete('appointment/{appointment}', [Appointments::class, 'destroy'])->name('appointment.destroy');
     Route::get('messages', [MessageController::class, 'index'])->name('messages');
     Route::get('messages/{user}/messages', [MessageController::class, 'getMessages'])->name('messages.get');
     Route::post('messages', [MessageController::class, 'store'])->name('messages.store');

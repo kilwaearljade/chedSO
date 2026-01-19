@@ -36,7 +36,6 @@ import { cn, isSameUrl, resolveUrl } from '@/lib/utils';
 import {
     dashboard,
     calendar,
-    appointment,
     messages,
     feedback,
     schoolslist,
@@ -45,6 +44,7 @@ import {
     schoolfeedback,
     schoolmessages
 } from '@/routes';
+import Appointments from '@/actions/App/Http/Controllers/Appointments';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import { BookOpen, BookUser, LayoutGrid, Mail, Calendar, Menu, Search, Bell, Home, User2Icon } from 'lucide-react';
@@ -64,7 +64,7 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Appointments',
-        href: appointment(),
+        href: Appointments.index(),
         icon: BookOpen,
     },
     {
@@ -352,10 +352,14 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                 >
                                     <Avatar className="size-8 overflow-hidden rounded-full">
                                         <AvatarImage
-                                            src={auth.user.avatar}
+                                            src={
+                                                auth.user.profile_photo_path
+                                                    ? `/storage/${auth.user.profile_photo_path}`
+                                                    : undefined
+                                            }
                                             alt={auth.user.name}
                                         />
-                                        <AvatarFallback className="rounded-lg bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white">
+                                        <AvatarFallback className="rounded-full bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white">
                                             {getInitials(auth.user.name)}
                                         </AvatarFallback>
                                     </Avatar>

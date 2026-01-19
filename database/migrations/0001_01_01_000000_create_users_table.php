@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('password');
             $table->string('role')->default('school');
             $table->boolean('is_approve')->default(false); // true means approved by admin
+            $table->string('profile_photo_path')->default('profile_photo/default.jpg');
             $table->rememberToken();
             $table->timestamps();
         });

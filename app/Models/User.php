@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use Nette\Utils\Image;
 
 class User extends Authenticatable
 {
@@ -24,6 +25,7 @@ class User extends Authenticatable
         'password',
         'role',
         'is_approve',
+        'profile_photo_path',
     ];
 
     /**
@@ -51,5 +53,9 @@ class User extends Authenticatable
             'two_factor_confirmed_at' => 'datetime',
             'is_approve' => 'boolean',
         ];
+    }
+    public function getProfilePhotoUrlAttribute()
+    {
+        return asset('storage/' . $this->profile_photo);
     }
 }

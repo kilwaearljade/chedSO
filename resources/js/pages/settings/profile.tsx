@@ -7,12 +7,15 @@ import { Form, Head, Link, usePage } from '@inertiajs/react';
 import DeleteUser from '@/components/delete-user';
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useInitials } from '@/hooks/use-initials';
 import AppLayout from '@/layouts/app-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 import { edit } from '@/routes/profile';
+import { useRef, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -29,6 +32,20 @@ export default function Profile({
     status?: string;
 }) {
     const { auth } = usePage<SharedData>().props;
+    const getInitials = useInitials();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPreviewSrc(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -38,7 +55,7 @@ export default function Profile({
                 <div className="space-y-6">
                     <HeadingSmall
                         title="Profile information"
-                        description="Update your name and email address"
+                        description="Update your name, email address, and profile photo"
                     />
 
                     <Form
@@ -50,6 +67,61 @@ export default function Profile({
                     >
                         {({ processing, recentlySuccessful, errors }) => (
                             <>
+                                {/* Profile Photo Section */}
+                                <div className="space-y-4">
+                                    <Label>Profile Photo</Label>
+                                    <div className="flex items-end gap-4">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <Avatar className="h-20 w-20">
+                                                <AvatarImage
+                                                    src={
+                                                        previewSrc ||
+                                                        (auth.user.profile_photo_path
+                                                            ? `/storage/${auth.user.profile_photo_path}`
+                                                            : undefined)
+                                                    }
+                                                    alt={auth.user.name}
+                                                />
+                                                <AvatarFallback className="text-lg bg-neutral-200 dark:bg-neutral-700">
+                                                    {getInitials(
+                                                        auth.user.name,
+                                                    )}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <span className="text-xs text-muted-foreground">
+                                                {auth.user.name}
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                onClick={() =>
+                                                    fileInputRef.current?.click()
+                                                }
+                                            >
+                                                Change Photo
+                                            </Button>
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                name="profile_photo"
+                                                accept="image/jpeg,image/png,image/jpg,image/gif"
+                                                onChange={handlePhotoChange}
+                                                className="hidden"
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                JPG, PNG or GIF, max 2MB
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.profile_photo}
+                                    />
+                                </div>
+
                                 <div className="grid gap-2">
                                     <Label htmlFor="name">Name</Label>
 
