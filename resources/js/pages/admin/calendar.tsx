@@ -5,10 +5,11 @@ import { Head, usePage, router, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Plus, Search, Calendar as CalendarIcon, Clock, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Search, Calendar as CalendarIcon, Clock, Filter, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import InputError from "@/components/input-error";
 
 import {
   Sheet,
@@ -18,7 +19,6 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -34,9 +34,9 @@ interface CalendarEvent {
     date: string; // YYYY-MM-DD format
     description?: string;
     color: string;
-    type: 'event' | 'appointment'; // To distinguish between admin events and school appointments
-    school_name?: string; // For appointments - which school created it
-    status?: string; // For appointments - pending/cancelled/complete
+    type: 'event' | 'appointment';
+    school_name?: string;
+    status?: string;
 }
 
 interface CalendarPageProps {
@@ -62,11 +62,19 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
     const [searchQuery, setSearchQuery] = useState('');
 
     // Form for creating events using Inertia
-    const { data, setData, post, processing, reset } = useForm({
+    const { data, setData, post, processing, reset, errors } = useForm({
         event_name: '',
         event_date: '',
         description: '',
     });
+
+    // Helper function to check if date is a weekend
+    const isWeekend = (dateString: string): boolean => {
+        if (!dateString) return false;
+        const date = new Date(dateString);
+        const day = date.getDay();
+        return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+    };
 
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -80,7 +88,10 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
     // Set default date when selectedDateFull changes
     useEffect(() => {
         if (selectedDateFull) {
-            setData('event_date', selectedDateFull.toISOString().split('T')[0]);
+            const year = selectedDateFull.getFullYear();
+            const month = String(selectedDateFull.getMonth() + 1).padStart(2, '0');
+            const day = String(selectedDateFull.getDate()).padStart(2, '0');
+            setData('event_date', `${year}-${month}-${day}`);
         }
     }, [selectedDateFull]);
 
@@ -95,7 +106,10 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
     };
 
     const getItemsForDate = (dateObj: Date): CalendarEvent[] => {
-        const dateString = dateObj.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
         return allItems.filter(item => item.date === dateString);
     };
 
@@ -120,18 +134,20 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
     const handleSubmitEvent = (e: React.FormEvent) => {
         e.preventDefault();
 
-        console.log('Submitting event:', data);
+        // Check if selected date is a weekend
+        if (data.event_date && isWeekend(data.event_date)) {
+            alert('Cannot create event on weekends (Saturday or Sunday).');
+            return;
+        }
 
         post('/calendar/events', {
             onSuccess: () => {
-                console.log('Event created successfully!');
                 reset();
                 setIsAddEventSheetOpen(false);
                 router.reload();
             },
             onError: (errors) => {
                 console.error('Validation errors:', errors);
-                alert('Error: ' + JSON.stringify(errors));
             },
         });
     };
@@ -145,7 +161,7 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
 
         router.delete(url, {
             onSuccess: () => {
-                console.log(`${itemType} deleted successfully!`);
+                setIsDateSheetOpen(false);
                 router.reload();
             },
             onError: (errors) => {
@@ -220,7 +236,7 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(currentYear, currentMonth, day);
             const isToday = date.toDateString() === new Date().toDateString();
-            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
+            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth() && currentYear === selectedDateFull?.getFullYear();
             const dayItems = getItemsForDate(date);
 
             days.push(
@@ -351,7 +367,7 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
             const date = new Date(currentYear, currentMonth, day);
             const hasItems = getItemsForDate(date).length > 0;
             const isToday = date.toDateString() === new Date().toDateString();
-            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
+            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth() && currentYear === selectedDateFull?.getFullYear();
 
             miniDays.push(
                 <button
@@ -408,8 +424,10 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
     };
 
     // Get upcoming items sorted by date (filtered by search)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const upcomingItems = filteredItems
-        .filter(item => new Date(item.date) >= new Date(new Date().setHours(0, 0, 0, 0)))
+        .filter(item => new Date(item.date) >= today)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
         .slice(0, 5);
 
@@ -547,11 +565,9 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
                                             <ChevronRight className="h-4 w-4" />
                                         </Button>
                                     </div>
-
                                     <CardTitle className="text-2xl font-bold">
                                         {monthNames[currentMonth]} {currentYear}
                                     </CardTitle>
-
                                     {isAdmin && (
                                         <Button
                                             variant="outline"
@@ -676,6 +692,7 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
                                                         onChange={(e) => setData('event_name', e.target.value)}
                                                         required
                                                     />
+                                                    <InputError message={errors.event_name} />
                                                 </div>
                                                 <div className="grid gap-3">
                                                     <Label htmlFor="event_date">Date</Label>
@@ -685,7 +702,17 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
                                                         value={data.event_date}
                                                         onChange={(e) => setData('event_date', e.target.value)}
                                                         required
+                                                        className={isWeekend(data.event_date) ? 'border-destructive' : ''}
                                                     />
+                                                    {isWeekend(data.event_date) && (
+                                                        <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-2 rounded-md">
+                                                            <AlertCircle className="h-4 w-4" />
+                                                            <span>
+                                                                Cannot create event on weekends (Saturday or Sunday).
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <InputError message={errors.event_date} />
                                                 </div>
                                                 <div className="grid gap-3">
                                                     <Label htmlFor="description">Description (optional)</Label>
@@ -699,7 +726,10 @@ export default function Calendar({ events: initialEvents = [], appointments: ini
                                                 </div>
                                             </div>
                                             <SheetFooter className="mt-6">
-                                                <Button type="submit" disabled={processing}>
+                                                <Button
+                                                    type="submit"
+                                                    disabled={processing || (!!data.event_date && isWeekend(data.event_date))}
+                                                >
                                                     {processing ? 'Saving...' : 'Save Event'}
                                                 </Button>
                                                 <SheetClose asChild>

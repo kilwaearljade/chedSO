@@ -19,7 +19,6 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -86,6 +85,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
 
     // Helper function to check if a date has an event
     const hasEventOnDate = (dateString: string): boolean => {
+        if (!dateString) return false;
         return events.some(event => event.date === dateString);
     };
 
@@ -106,7 +106,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
     // Set default date when selectedDateFull changes
     useEffect(() => {
         if (selectedDateFull) {
-            setData('appointment_date', selectedDateFull.toISOString().split('T')[0]);
+            const year = selectedDateFull.getFullYear();
+            const month = String(selectedDateFull.getMonth() + 1).padStart(2, '0');
+            const day = String(selectedDateFull.getDate()).padStart(2, '0');
+            setData('appointment_date', `${year}-${month}-${day}`);
         }
     }, [selectedDateFull]);
 
@@ -121,7 +124,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
     };
 
     const getAppointmentsForDate = (dateObj: Date) => {
-        const dateString = dateObj.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
         return allItems.filter(item => item.date === dateString);
     };
 
@@ -154,12 +160,8 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
             return;
         }
 
-        console.log('Submitting appointment:', data);
-
-        // Use direct URL instead of route helper
         post('/school/calendar/appointments', {
             onSuccess: () => {
-                console.log('Appointment created successfully!');
                 reset();
                 setIsAddAppointmentSheetOpen(false);
                 router.reload();
@@ -172,10 +174,9 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
 
     const handleDeleteAppointment = (appointmentId: number) => {
         if (confirm('Are you sure you want to delete this appointment?')) {
-            // Use direct URL instead of route helper
             router.delete(`/school/calendar/appointments/${appointmentId}`, {
                 onSuccess: () => {
-                    console.log('Appointment deleted successfully!');
+                    setIsDateSheetOpen(false);
                     router.reload();
                 },
                 onError: (errors) => {
@@ -249,9 +250,12 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         // Days of the current month
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(currentYear, currentMonth, day);
-            const dateString = date.toISOString().split('T')[0];
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const dayStr = String(date.getDate()).padStart(2, '0');
+            const dateString = `${year}-${month}-${dayStr}`;
             const isToday = date.toDateString() === new Date().toDateString();
-            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
+            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth() && currentYear === selectedDateFull?.getFullYear();
             const dayAppointments = getAppointmentsForDate(date);
             const hasEvent = hasEventOnDate(dateString);
 
@@ -366,7 +370,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         for (let i = 0; i < firstDay; i++) {
             const day = daysInPrevMonth - firstDay + i + 1;
             const date = new Date(prevYear, prevMonth, day);
-            const dateString = date.toISOString().split('T')[0];
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const dayStr = String(date.getDate()).padStart(2, '0');
+            const dateString = `${year}-${month}-${dayStr}`;
             const isToday = date.toDateString() === new Date().toDateString();
             const hasAppointment = getAppointmentsForDate(date).length > 0;
             const hasEvent = hasEventOnDate(dateString);
@@ -382,7 +389,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                     }`}
                 >
                     {day}
-                    {hasAppointment && (
+                    {hasEvent && (
+                        <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-destructive" />
+                    )}
+                    {!hasEvent && hasAppointment && (
                         <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
                     )}
                 </button>
@@ -392,11 +402,14 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         // Days of current month
         for (let day = 1; day <= lastDate; day++) {
             const date = new Date(currentYear, currentMonth, day);
-            const dateString = date.toISOString().split('T')[0];
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const dayStr = String(date.getDate()).padStart(2, '0');
+            const dateString = `${year}-${month}-${dayStr}`;
             const hasAppointment = getAppointmentsForDate(date).length > 0;
             const hasEvent = hasEventOnDate(dateString);
             const isToday = date.toDateString() === new Date().toDateString();
-            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth();
+            const isSelected = day === selectedDate && currentMonth === selectedDateFull?.getMonth() && currentYear === selectedDateFull?.getFullYear();
 
             miniDays.push(
                 <button
@@ -436,7 +449,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
             const date = new Date(nextYear, nextMonth, day);
-            const dateString = date.toISOString().split('T')[0];
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const dayStr = String(date.getDate()).padStart(2, '0');
+            const dateString = `${year}-${month}-${dayStr}`;
             const isToday = date.toDateString() === new Date().toDateString();
             const hasAppointment = getAppointmentsForDate(date).length > 0;
             const hasEvent = hasEventOnDate(dateString);
@@ -469,8 +485,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
     };
 
     // Get upcoming items sorted by date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const upcomingItems = filteredItems
-        .filter(item => new Date(item.date) >= new Date(new Date().setHours(0, 0, 0, 0)))
+        .filter(item => new Date(item.date) >= today)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
         .slice(0, 5);
 
