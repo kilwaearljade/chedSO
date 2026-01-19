@@ -45,9 +45,7 @@ Route::middleware(['auth', 'verified', 'authorization:admin'])->group(function (
 
 // School Routes
 Route::middleware(['auth', 'verified', 'authorization:school'])->group(function () {
-    Route::get('school/dashboard', function () {
-        return Inertia::render('school/dashboard');
-    })->name('schooldashboard');
+    Route::get('school/dashboard', [App\Http\Controllers\SchoolDashboardController::class, 'index'])->name('schooldashboard');
     Route::get('school/calendar', [SchoolCalendarController::class, 'index'])->name('schoolcalendar');
     Route::get('school/calendar/appointments', [SchoolCalendarController::class, 'getAppointmentsByDate'])->name('schoolcalendar.appointments');
     Route::post('school/calendar/appointments', [SchoolCalendarController::class, 'store'])->name('schoolcalendar.appointments.store');

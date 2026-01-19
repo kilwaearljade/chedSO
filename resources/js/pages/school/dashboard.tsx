@@ -20,46 +20,29 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
+interface Stat {
+    label: string;
+    value: number;
+    icon: string;
+}
+
+interface Appointment {
+    id: number;
+    title: string;
+    date: string;
+    time: string;
+    status: string;
+}
+
+interface Props {
+    stats: Stat[];
+    upcomingAppointments: Appointment[];
+}
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'School Home',
         href: '#',
-    },
-];
-
-// Mock data – replace with real data from your backend/props
-const stats = [
-    {
-        label: 'Upcoming Appointments',
-        value: 3,
-        icon: Calendar,
-    },
-    {
-        label: 'Pending Documents',
-        value: 5,
-        icon: FileText,
-    },
-    {
-        label: 'Unread Messages',
-        value: 2,
-        icon: MessageCircle,
-    },
-];
-
-const upcomingAppointments = [
-    {
-        id: 1,
-        title: 'Special-Order Consultation',
-        date: 'Jan 15, 2026',
-        time: '10:30 AM',
-        status: 'Confirmed',
-    },
-    {
-        id: 2,
-        title: 'Document Review',
-        date: 'Jan 20, 2026',
-        time: '2:00 PM',
-        status: 'Pending',
     },
 ];
 
@@ -81,7 +64,15 @@ const quickLinks = [
     },
 ];
 
-export default function SchoolHome() {
+const iconMap: { [key: string]: React.ComponentType<{ className: string }> } = {
+    Calendar,
+    MessageCircle,
+    FileText,
+    Clock,
+    CheckCircle2,
+};
+
+export default function SchoolHome({ stats, upcomingAppointments }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="School Home" />
@@ -105,14 +96,14 @@ export default function SchoolHome() {
                 {/* Top Stats */}
                 <div className="grid gap-4 md:grid-cols-3">
                     {stats.map((stat) => {
-                        const Icon = stat.icon;
+                        const Icon = iconMap[stat.icon];
                         return (
                             <Card key={stat.label} className="flex flex-col justify-between">
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                     <CardTitle className="text-sm font-medium">
                                         {stat.label}
                                     </CardTitle>
-                                    <Icon className="h-5 w-5 text-primary" />
+                                    {Icon && <Icon className="h-5 w-5 text-primary" />}
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-2xl font-bold">{stat.value}</p>

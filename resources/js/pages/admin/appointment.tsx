@@ -300,7 +300,7 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
                                                         {appointment.user?.name || appointment.school_name}
                                                     </CardTitle>
                                                     <CardDescription className="mt-1">
-                                                        Appointment #{appointment.id}
+                                                        {appointment.reason}
                                                     </CardDescription>
                                                 </div>
                                             </div>
