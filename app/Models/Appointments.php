@@ -29,4 +29,12 @@ class Appointments extends Model
     {
         return $this->belongsTo(\App\Models\User::class, 'assigned_by');
     }
+
+    /**
+     * Get all of the notifications for the appointment.
+     */
+    public function notifications()
+    {
+        return $this->morphMany(Notification::class, 'notifiable');
+    }
 }

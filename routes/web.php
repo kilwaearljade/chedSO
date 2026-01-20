@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\SchoolCalendarController;
 use App\Http\Controllers\Appointments;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -64,6 +65,21 @@ Route::middleware(['auth', 'verified', 'authorization:school'])->group(function 
     Route::get('waiting', function () {
         return Inertia::render('waitingpage');
     })->name('waiting');
+});
+
+// Notification Routes (Authenticated)
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::prefix('notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::get('/unread', [NotificationController::class, 'unread'])->name('notifications.unread');
+        Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+        Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead'])->name('notifications.mark-read');
+        Route::patch('/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('notifications.mark-all-read');
+        Route::delete('/{notification}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
+        Route::delete('/', [NotificationController::class, 'clearAll'])->name('notifications.clear-all');
+        Route::get('/type/{type}', [NotificationController::class, 'getByType'])->name('notifications.by-type');
+        Route::get('/admin/activity', [NotificationController::class, 'adminActivity'])->name('notifications.admin-activity');
+    });
 });
 
 require __DIR__.'/settings.php';

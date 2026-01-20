@@ -27,4 +27,12 @@ class CalendarEvents extends Model
     {
         return $this->belongsTo(\App\Models\User::class, 'created_by');
     }
+
+    /**
+     * Get all of the notifications for the event.
+     */
+    public function notifications()
+    {
+        return $this->morphMany(Notification::class, 'notifiable');
+    }
 }

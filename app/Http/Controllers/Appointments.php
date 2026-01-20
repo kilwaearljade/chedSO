@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\AppointmentConfirmed;
+use App\Events\AppointmentCreated;
 use App\Models\Appointments as AppointmentsModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -75,7 +77,10 @@ class Appointments extends Controller
         $validated['assigned_by'] = Auth::id();
         $validated['file_count'] = 0;
 
-        AppointmentsModel::create($validated);
+        $appointment = AppointmentsModel::create($validated);
+
+        // Fire the appointment created event to notify admins
+        AppointmentCreated::dispatch($appointment, "New appointment request from " . Auth::user()->name);
 
         return redirect()->back()->with('success', 'Appointment created successfully');
     }
@@ -115,6 +120,9 @@ class Appointments extends Controller
         $appointment->update([
             'status' => 'complete',
         ]);
+
+        // Fire the appointment confirmed event
+        AppointmentConfirmed::dispatch($appointment, 'Your appointment has been approved');
 
         return redirect()->back()->with('success', 'Appointment approved successfully');
     }

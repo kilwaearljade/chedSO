@@ -26,4 +26,12 @@ class Message extends Model
     {
         return $this->belongsTo(User::class, 'receiver_id');
     }
+
+    /**
+     * Get all of the notifications for the message.
+     */
+    public function notifications()
+    {
+        return $this->morphMany(Notification::class, 'notifiable');
+    }
 }

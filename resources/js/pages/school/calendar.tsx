@@ -42,6 +42,7 @@ interface Appointment {
     split_sequence: number | null;
     total_splits: number | null;
     parent_appointment_id: number | null;
+    assigned_by?: number;
 }
 
 interface CalendarEvent {
@@ -633,6 +634,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                 setSelectedDateFull(new Date());
                                                 setIsAddAppointmentSheetOpen(true);
                                             }}
+                                            disabled={selectedDateFull ? new Date(selectedDateFull).toDateString() === new Date().toDateString() : false}
                                         >
                                             <Plus className="mr-2 h-4 w-4" /> Add Appointment
                                         </Button>
@@ -697,7 +699,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                                     </p>
                                                                 )}
                                                             </div>
-                                                            {isSchool && item.type === 'appointment' && (
+                                                            {isSchool && item.type === 'appointment' && item.assigned_by === auth.user.id && (
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="sm"
@@ -726,6 +728,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                         setIsDateSheetOpen(false);
                                                         setIsAddAppointmentSheetOpen(true);
                                                     }}
+                                                    disabled={selectedDateFull ? new Date(selectedDateFull).toDateString() === new Date().toDateString() : false}
                                                     className="w-full sm:w-auto"
                                                 >
                                                     <Plus className="mr-2 h-4 w-4" /> Add Appointment

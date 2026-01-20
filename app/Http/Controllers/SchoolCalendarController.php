@@ -15,9 +15,8 @@ class SchoolCalendarController extends Controller
      */
     public function index()
     {
-        // Get school's own appointments (including split appointments)
-        $appointments = Appointments::where('assigned_by', Auth::id())
-            ->orderBy('appointment_date', 'asc')
+        // Get all appointments (including user's own and appointments from other users)
+        $appointments = Appointments::orderBy('appointment_date', 'asc')
             ->get()
             ->map(function ($appointment) {
                 return [
@@ -34,6 +33,7 @@ class SchoolCalendarController extends Controller
                     'total_splits' => $appointment->total_splits,
                     'parent_appointment_id' => $appointment->parent_appointment_id,
                     'color' => $this->getAppointmentColor($appointment->id),
+                    'assigned_by' => $appointment->assigned_by,
                 ];
             });
 
@@ -44,7 +44,7 @@ class SchoolCalendarController extends Controller
                 return [
                     'id' => $event->id,
                     'name' => $event->event_name,
-                    'date' => $event->event_date,
+                    'date' => $event->event_date->format('Y-m-d'),
                     'description' => $event->description,
                     'color' => $this->getEventColor($event->id),
                 ];
@@ -63,8 +63,7 @@ class SchoolCalendarController extends Controller
     {
         $date = $request->input('date');
 
-        $appointments = Appointments::where('assigned_by', Auth::id())
-            ->whereDate('appointment_date', $date)
+        $appointments = Appointments::whereDate('appointment_date', $date)
             ->get()
             ->map(function ($appointment) {
                 return [
@@ -96,6 +95,21 @@ class SchoolCalendarController extends Controller
 
             $fileCount = $validated['file_count'];
             $startDate = \Carbon\Carbon::parse($validated['appointment_date']);
+            $today = \Carbon\Carbon::today();
+
+            // Check if appointment date is today
+            if ($startDate->isSameDay($today)) {
+                if ($request->expectsJson() || $request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Cannot create appointment for today. Please select a future date."
+                    ], 422);
+                }
+                return redirect()->back()->withErrors([
+                    'appointment_date' => "Cannot create appointment for today. Please select a future date."
+                ])->withInput();
+            }
+
             $dailyLimit = 200; // Maximum files per day across all schools
 
             // Check if there's an event on the requested date
@@ -198,7 +212,9 @@ class SchoolCalendarController extends Controller
                         return [
                             'id' => $apt->id,
                             'school_name' => $apt->school_name,
-                            'date' => $apt->appointment_date->format('Y-m-d'),
+                            'date' => $apt->appointment_date instanceof \Carbon\Carbon
+                                ? $apt->appointment_date->format('Y-m-d')
+                                : \Carbon\Carbon::parse($apt->appointment_date)->format('Y-m-d'),
                             'file_count' => $apt->file_count,
                         ];
                     })
@@ -258,9 +274,9 @@ class SchoolCalendarController extends Controller
     {
         $appointment = Appointments::findOrFail($id);
 
-        // Check if user owns this appointment
+        // User can only delete their own appointment
         if ($appointment->assigned_by !== Auth::id()) {
-            abort(403, 'Unauthorized action.');
+            abort(403, 'You can only delete your own appointments.');
         }
 
         $appointment->delete();

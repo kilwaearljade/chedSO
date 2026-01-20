@@ -3,6 +3,7 @@ import Bagoph from './app-logo-icon-bp';
 import { Icon } from '@/components/icon';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import React from 'react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -32,6 +33,8 @@ import {
 } from '@/components/ui/tooltip';
 import { UserMenuContent } from '@/components/user-menu-content';
 import { useInitials } from '@/hooks/use-initials';
+import { useNotifications } from '@/hooks/useNotifications';
+import { formatDistanceToNow } from 'date-fns';
 import { cn, isSameUrl, resolveUrl } from '@/lib/utils';
 import {
     dashboard,
@@ -130,6 +133,62 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const page = usePage<SharedData>();
     const { auth } = page.props;
     const getInitials = useInitials();
+    const { 
+        notifications, 
+        unreadCount, 
+        markAsRead, 
+        deleteNotification,
+        fetchUnreadNotifications 
+    } = useNotifications({ pollInterval: 10000 });
+
+    // Fetch notifications on mount
+    React.useEffect(() => {
+        fetchUnreadNotifications(5);
+    }, [fetchUnreadNotifications]);
+
+    const getNotificationRoute = (type: string): string => {
+        switch (type) {
+            case 'appointment_confirmed':
+            case 'appointment_pending':
+            case 'appointment_activity':
+                return '/appointment';
+            case 'new_message':
+            case 'message_activity':
+                return '/messages';
+            case 'event_created':
+            case 'event_activity':
+                return auth.user.role === 'admin' ? '/calendar' : '/school/calendar';
+            case 'new_registration':
+                return '/schools';
+            default:
+                return '/notifications';
+        }
+    };
+
+    const handleNotificationClick = (notification: any) => {
+        markAsRead(notification.id);
+        const route = getNotificationRoute(notification.type);
+        window.location.href = route;
+    };
+
+    const getNotificationIcon = (type: string) => {
+        switch (type) {
+            case 'appointment_confirmed':
+            case 'appointment_pending':
+            case 'appointment_activity':
+                return '📅';
+            case 'new_message':
+            case 'message_activity':
+                return '💬';
+            case 'event_created':
+            case 'event_activity':
+                return '🎉';
+            case 'new_registration':
+                return '👤';
+            default:
+                return '🔔';
+        }
+    };
     return (
         <>
             <div className="sticky top-0 z-50 border-b border-sidebar-border/80 bg-background">
@@ -293,54 +352,64 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                     className="relative h-9 w-9"
                                 >
                                     <Bell className="h-5 w-5" />
-                                    <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white">
-                                        3
-                                    </span>
+                                    {unreadCount > 0 && (
+                                        <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white">
+                                            {unreadCount > 99 ? '99+' : unreadCount}
+                                        </span>
+                                    )}
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="w-80" align="end">
-                                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                                <DropdownMenuLabel>Notifications {unreadCount > 0 && `(${unreadCount} unread)`}</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 <div className="max-h-96 overflow-y-auto">
-                                    <DropdownMenuItem className="flex flex-col items-start p-3">
-                                        <div className="flex w-full items-start justify-between">
-                                            <div className="flex-1">
-                                                <p className="text-sm font-medium">New appointment request</p>
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    You have a new appointment request from John Doe
-                                                </p>
-                                            </div>
-                                            <span className="text-xs text-muted-foreground ml-2">2m ago</span>
+                                    {notifications.length === 0 ? (
+                                        <div className="p-4 text-center text-sm text-muted-foreground">
+                                            No notifications yet
                                         </div>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem className="flex flex-col items-start p-3">
-                                        <div className="flex w-full items-start justify-between">
-                                            <div className="flex-1">
-                                                <p className="text-sm font-medium">Appointment confirmed</p>
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    Your appointment for tomorrow has been confirmed
-                                                </p>
-                                            </div>
-                                            <span className="text-xs text-muted-foreground ml-2">1h ago</span>
-                                        </div>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem className="flex flex-col items-start p-3">
-                                        <div className="flex w-full items-start justify-between">
-                                            <div className="flex-1">
-                                                <p className="text-sm font-medium">New message</p>
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    You have received a new message
-                                                </p>
-                                            </div>
-                                            <span className="text-xs text-muted-foreground ml-2">3h ago</span>
-                                        </div>
-                                    </DropdownMenuItem>
+                                    ) : (
+                                        notifications.map((notification, index) => (
+                                            <React.Fragment key={notification.id}>
+                                                <DropdownMenuItem 
+                                                    className="flex flex-col items-start p-3 cursor-pointer hover:bg-accent"
+                                                    onClick={() => handleNotificationClick(notification)}
+                                                >
+                                                    <div className="flex w-full items-start justify-between">
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span>{getNotificationIcon(notification.type)}</span>
+                                                                <p className="text-sm font-medium">{notification.title}</p>
+                                                            </div>
+                                                            <p className="text-xs text-muted-foreground mt-1">
+                                                                {notification.message}
+                                                            </p>
+                                                        </div>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-4 w-4 p-0 ml-2"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                deleteNotification(notification.id);
+                                                            }}
+                                                        >
+                                                            ✕
+                                                        </Button>
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground mt-2">
+                                                        {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                                                    </span>
+                                                </DropdownMenuItem>
+                                                {index < notifications.length - 1 && <DropdownMenuSeparator />}
+                                            </React.Fragment>
+                                        ))
+                                    )}
                                 </div>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem className="justify-center">
-                                    View all notifications
+                                <DropdownMenuItem className="justify-center cursor-pointer">
+                                    <Link href="/notifications" className="text-sm font-medium">
+                                        View all notifications
+                                    </Link>
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>

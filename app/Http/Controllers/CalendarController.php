@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\EventCreated;
 use App\Models\CalendarEvents;  // or CalendarEvents - check your model name
 use App\Models\Appointments;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ class CalendarController extends Controller
                 return [
                     'id' => $event->id,
                     'name' => $event->event_name,
-                    'date' => $event->event_date,
+                    'date' => $event->event_date->format('Y-m-d'),
                     'description' => $event->description,
                     'color' => $this->getEventColor($event->id),
                 ];
@@ -37,7 +38,7 @@ class CalendarController extends Controller
                 return [
                     'id' => $appointment->id,
                     'name' => $appointment->school_name,
-                    'date' => $appointment->appointment_date->format('Y-m-d'),
+                    'date' => \Carbon\Carbon::parse($appointment->appointment_date)->format('Y-m-d'),
                     'description' => $appointment->reason,
                     'status' => $appointment->status,
                     'school_name' => $appointment->user?->name ?? 'Unknown School',
@@ -90,6 +91,9 @@ class CalendarController extends Controller
                 'event_date' => $validated['event_date'],
                 'description' => $validated['description'] ?? null,
             ]);
+
+            // Fire the event created event for real-time notifications
+            EventCreated::dispatch($event);
 
             if ($request->expectsJson() || $request->wantsJson()) {
                 return response()->json([

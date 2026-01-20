@@ -58,7 +58,7 @@ export default function Message() {
     const getInitials = useInitials();
     const { props } = usePage<SharedData & MessagePageProps>();
     const initialConversations = props.conversations || [];
-    
+
     const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
     const [selectedConversation, setSelectedConversation] = useState<number | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -78,8 +78,20 @@ export default function Message() {
         conv.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Get CSRF token helper
+    const getCsrfToken = useCallback(() => {
+        const name = 'XSRF-TOKEN';
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) {
+            const token = parts.pop()?.split(';').shift();
+            return token ? decodeURIComponent(token) : '';
+        }
+        return '';
+    }, []);
+
     // Fetch messages function
-    const fetchMessages = (conversationId: number, isInitialLoad = false) => {
+    const fetchMessages = useCallback((conversationId: number, isInitialLoad = false) => {
         if (isInitialLoad) {
             setLoading(true);
         }
@@ -87,45 +99,57 @@ export default function Message() {
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
+                'X-XSRF-TOKEN': getCsrfToken(),
             },
             credentials: 'include',
         })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch messages');
+                return res.json();
+            })
             .then(data => {
                 setMessages(data.messages || []);
                 if (isInitialLoad) {
                     setLoading(false);
                 }
                 // Mark as read
-                fetch(`/school/messages/${conversationId}/read`, {
+                return fetch(`/school/messages/${conversationId}/read`, {
                     method: 'PATCH',
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
                         'Accept': 'application/json',
+                        'X-XSRF-TOKEN': getCsrfToken(),
                     },
                     credentials: 'include',
                 });
             })
-            .catch(() => {
+            .catch((error) => {
+                console.error('Error fetching messages:', error);
                 if (isInitialLoad) {
                     setLoading(false);
                 }
             });
-    };
+    }, [getCsrfToken]);
 
     // Fetch conversations list
     const fetchConversations = useCallback(() => {
         router.reload({
             only: ['conversations'],
-            preserveScroll: true,
             onSuccess: (page) => {
-                const newProps = page.props as SharedData & MessagePageProps;
-                if (newProps.conversations) {
+                const newProps = page.props as any;
+                if (newProps?.conversations) {
                     setConversations(newProps.conversations);
                 }
             },
         });
     }, []);
+
+    // Sync conversations when props change
+    useEffect(() => {
+        if (props.conversations) {
+            setConversations(props.conversations);
+        }
+    }, [props.conversations]);
 
     // Fetch messages when conversation is selected
     useEffect(() => {
@@ -157,7 +181,7 @@ export default function Message() {
                 messagesPollIntervalRef.current = null;
             }
         };
-    }, [selectedConversation]);
+    }, [selectedConversation, fetchMessages]);
 
     // Poll conversations list every 5 seconds
     useEffect(() => {
@@ -175,9 +199,16 @@ export default function Message() {
                 conversationsPollIntervalRef.current = null;
             }
         };
-    }, []);
+    }, [fetchConversations]);
 
-    const handleSendMessage = (messageText: string) => {
+    // Auto-scroll to bottom when new messages arrive
+    useEffect(() => {
+        if (messages.length > 0 && messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages.length]);
+
+    const handleSendMessage = useCallback((messageText: string) => {
         if (!messageText.trim() || !selectedConversation || sending) {
             return;
         }
@@ -185,20 +216,11 @@ export default function Message() {
         setSending(true);
         setShowMessageOptions(false);
 
-        // Get CSRF token from cookie
-        const getCsrfToken = () => {
-            const name = 'XSRF-TOKEN';
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop()?.split(';').shift();
-            return '';
-        };
-
         fetch('/school/messages', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken()),
+                'X-XSRF-TOKEN': getCsrfToken(),
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
@@ -208,42 +230,33 @@ export default function Message() {
                 message: messageText.trim(),
             }),
         })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to send message');
+                return res.json();
+            })
             .then(data => {
                 if (data.success && data.message) {
                     // Add user's message
                     setMessages(prev => [...prev, data.message]);
-                    
+
                     // Add auto-response if available (chatbot-like response)
                     if (data.autoResponse) {
                         // Add a small delay to make it feel more natural
                         setTimeout(() => {
                             setMessages(prev => [...prev, data.autoResponse]);
-                            // Scroll to bottom after auto-response
-                            setTimeout(() => {
-                                if (messagesEndRef.current) {
-                                    messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-                                }
-                            }, 100);
                         }, 500);
                     }
-                    
+
                     // Refresh conversations to update last message
                     fetchConversations();
-                    
-                    // Auto-scroll to bottom when user sends a message
-                    setTimeout(() => {
-                        if (messagesEndRef.current) {
-                            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-                        }
-                    }, 100);
                 }
                 setSending(false);
             })
-            .catch(() => {
+            .catch((error) => {
+                console.error('Error sending message:', error);
                 setSending(false);
             });
-    };
+    }, [selectedConversation, sending, getCsrfToken, fetchConversations]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -255,7 +268,7 @@ export default function Message() {
                         {/* Header */}
                         <div className="px-4 py-3 border-b border-border">
                             <h2 className="text-xl font-semibold text-foreground mb-3">Messages</h2>
-                            
+
                             {/* Search Bar */}
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -365,7 +378,7 @@ export default function Message() {
                                 </div>
 
                                 {/* Messages Area */}
-                                <div 
+                                <div
                                     ref={messagesContainerRef}
                                     className="flex-1 p-4 overflow-y-auto space-y-3"
                                 >

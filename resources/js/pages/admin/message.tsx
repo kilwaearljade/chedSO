@@ -27,6 +27,7 @@ interface Conversation {
 interface Message {
     id: number;
     sender: 'me' | 'other';
+    profile_photo_path?: string;
     text: string;
     timestamp: string;
 }
@@ -39,7 +40,7 @@ export default function Message() {
     const getInitials = useInitials();
     const { props } = usePage<SharedData & MessagePageProps>();
     const initialConversations = props.conversations || [];
-    
+
     const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
     const [selectedConversation, setSelectedConversation] = useState<number | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -59,8 +60,20 @@ export default function Message() {
         conv.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Get CSRF token helper
+    const getCsrfToken = useCallback(() => {
+        const name = 'XSRF-TOKEN';
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) {
+            const token = parts.pop()?.split(';').shift();
+            return token ? decodeURIComponent(token) : '';
+        }
+        return '';
+    }, []);
+
     // Fetch messages function
-    const fetchMessages = (conversationId: number, isInitialLoad = false) => {
+    const fetchMessages = useCallback((conversationId: number, isInitialLoad = false) => {
         if (isInitialLoad) {
             setLoading(true);
         }
@@ -68,45 +81,57 @@ export default function Message() {
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
+                'X-XSRF-TOKEN': getCsrfToken(),
             },
             credentials: 'include',
         })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch messages');
+                return res.json();
+            })
             .then(data => {
                 setMessages(data.messages || []);
                 if (isInitialLoad) {
                     setLoading(false);
                 }
                 // Mark as read
-                fetch(`/messages/${conversationId}/read`, {
+                return fetch(`/messages/${conversationId}/read`, {
                     method: 'PATCH',
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
                         'Accept': 'application/json',
+                        'X-XSRF-TOKEN': getCsrfToken(),
                     },
                     credentials: 'include',
                 });
             })
-            .catch(() => {
+            .catch((error) => {
+                console.error('Error fetching messages:', error);
                 if (isInitialLoad) {
                     setLoading(false);
                 }
             });
-    };
+    }, [getCsrfToken]);
 
     // Fetch conversations list
     const fetchConversations = useCallback(() => {
         router.reload({
             only: ['conversations'],
-            preserveScroll: true,
             onSuccess: (page) => {
-                const newProps = page.props as SharedData & MessagePageProps;
-                if (newProps.conversations) {
+                const newProps = page.props as any;
+                if (newProps?.conversations) {
                     setConversations(newProps.conversations);
                 }
             },
         });
     }, []);
+
+    // Sync conversations when props change
+    useEffect(() => {
+        if (props.conversations) {
+            setConversations(props.conversations);
+        }
+    }, [props.conversations]);
 
     // Fetch messages when conversation is selected
     useEffect(() => {
@@ -138,7 +163,7 @@ export default function Message() {
                 messagesPollIntervalRef.current = null;
             }
         };
-    }, [selectedConversation]);
+    }, [selectedConversation, fetchMessages]);
 
     // Poll conversations list every 5 seconds
     useEffect(() => {
@@ -156,9 +181,16 @@ export default function Message() {
                 conversationsPollIntervalRef.current = null;
             }
         };
-    }, []);
+    }, [fetchConversations]);
 
-    const handleSendMessage = () => {
+    // Auto-scroll to bottom when new messages arrive
+    useEffect(() => {
+        if (messages.length > 0 && messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages.length]);
+
+    const handleSendMessage = useCallback(() => {
         if (!messageInput.trim() || !selectedConversation || sending) {
             return;
         }
@@ -167,20 +199,11 @@ export default function Message() {
         setMessageInput('');
         setSending(true);
 
-        // Get CSRF token from cookie
-        const getCsrfToken = () => {
-            const name = 'XSRF-TOKEN';
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop()?.split(';').shift();
-            return '';
-        };
-
         fetch('/messages', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken()),
+                'X-XSRF-TOKEN': getCsrfToken(),
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
@@ -190,33 +213,31 @@ export default function Message() {
                 message: messageText,
             }),
         })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to send message');
+                return res.json();
+            })
             .then(data => {
                 if (data.success && data.message) {
                     setMessages(prev => [...prev, data.message]);
                     // Refresh conversations to update last message
                     fetchConversations();
-                    // Auto-scroll to bottom when user sends a message
-                    setTimeout(() => {
-                        if (messagesEndRef.current) {
-                            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-                        }
-                    }, 100);
                 }
                 setSending(false);
             })
-            .catch(() => {
+            .catch((error) => {
+                console.error('Error sending message:', error);
                 setMessageInput(messageText); // Restore message on error
                 setSending(false);
             });
-    };
+    }, [messageInput, selectedConversation, sending, getCsrfToken, fetchConversations]);
 
-    const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSendMessage();
         }
-    };
+    }, [handleSendMessage]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -228,7 +249,7 @@ export default function Message() {
                         {/* Header */}
                         <div className="px-4 py-3 border-b border-border">
                             <h2 className="text-xl font-semibold text-foreground mb-3">Messages</h2>
-                            
+
                             {/* Search Bar */}
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -256,7 +277,9 @@ export default function Message() {
                                         {/* Avatar with active indicator */}
                                         <div className="relative">
                                             <Avatar className="h-12 w-12">
-                                                <AvatarImage src={conversation.avatar || undefined} alt={conversation.name} />
+                                                <AvatarImage
+
+                                                />
                                                 <AvatarFallback className="bg-primary/10 text-primary">
                                                     {getInitials(conversation.name)}
                                                 </AvatarFallback>
@@ -338,7 +361,7 @@ export default function Message() {
                                 </div>
 
                                 {/* Messages Area */}
-                                <div 
+                                <div
                                     ref={messagesContainerRef}
                                     className="flex-1 p-4 overflow-y-auto space-y-3"
                                 >

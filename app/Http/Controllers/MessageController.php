@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\MessageSent;
 use App\Models\Message;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -204,6 +205,9 @@ class MessageController extends Controller
             'message' => $validated['message'],
         ]);
 
+        // Fire message sent event for real-time notifications
+        MessageSent::dispatch($message);
+
         $response = [
             'success' => true,
             'message' => [
@@ -227,6 +231,9 @@ class MessageController extends Controller
                 'receiver_role' => 'school_registrar',
                 'message' => $adminResponse,
             ]);
+
+            // Fire event for auto-response as well
+            MessageSent::dispatch($autoResponse);
 
             // Add auto-response to the response
             $response['autoResponse'] = [
