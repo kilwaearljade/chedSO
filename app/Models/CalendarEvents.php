@@ -16,7 +16,7 @@ class CalendarEvents extends Model
         'description'
     ];
 
-    protected $dates = [
+    protected $casts = [
         'event_date' => 'date',
         'deleted_at' => 'datetime',
         'created_at' => 'datetime',

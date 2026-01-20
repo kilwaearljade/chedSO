@@ -92,13 +92,22 @@ class CalendarController extends Controller
                 'description' => $validated['description'] ?? null,
             ]);
 
+            // Automatically move appointments on this date to next available date
+            $movedAppointments = $this->moveAppointmentsFromEventDate($validated['event_date']);
+
             // Fire the event created event for real-time notifications
             EventCreated::dispatch($event);
+
+            $successMessage = 'Event created successfully';
+            if ($movedAppointments > 0) {
+                $successMessage .= ". {$movedAppointments} appointment(s) automatically moved to next available date(s).";
+            }
 
             if ($request->expectsJson() || $request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'Event created successfully',
+                    'message' => $successMessage,
+                    'moved_appointments' => $movedAppointments,
                     'event' => [
                         'id' => $event->id,
                         'name' => $event->event_name,
@@ -108,7 +117,7 @@ class CalendarController extends Controller
                 ]);
             }
 
-            return redirect()->back()->with('success', 'Event created successfully');
+            return redirect()->back()->with('success', $successMessage);
         } catch (\Illuminate\Validation\ValidationException $e) {
             if ($request->expectsJson() || $request->wantsJson()) {
                 return response()->json([
@@ -127,6 +136,88 @@ class CalendarController extends Controller
             }
             return redirect()->back()->withErrors(['error' => 'Failed to create event: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Move appointments from event date to next available date(s)
+     */
+    private function moveAppointmentsFromEventDate($eventDate)
+    {
+        $eventDate = \Carbon\Carbon::parse($eventDate);
+        
+        // Find all appointments on the event date
+        $appointments = Appointments::whereDate('appointment_date', $eventDate)->get();
+        
+        if ($appointments->isEmpty()) {
+            return 0;
+        }
+
+        $movedCount = 0;
+        foreach ($appointments as $appointment) {
+            // Find next available date for this appointment
+            $nextAvailableDate = $this->findNextAvailableDate(
+                $eventDate->copy()->addDay(),
+                $appointment->daily_file_count
+            );
+
+            if ($nextAvailableDate) {
+                $appointment->update([
+                    'appointment_date' => $nextAvailableDate->format('Y-m-d')
+                ]);
+                $movedCount++;
+                
+                Log::info("Appointment ID {$appointment->id} moved from {$eventDate->format('Y-m-d')} to {$nextAvailableDate->format('Y-m-d')} due to event creation.");
+            } else {
+                Log::warning("Could not find available date for appointment ID {$appointment->id}. Appointment remains on {$eventDate->format('Y-m-d')}");
+            }
+        }
+
+        return $movedCount;
+    }
+
+    /**
+     * Find the next available date that has no events and sufficient capacity
+     */
+    private function findNextAvailableDate($startDate, $requiredFileCount)
+    {
+        $currentDate = $startDate->copy();
+        $maxSearchDays = 365; // Prevent infinite loop
+        $daysSearched = 0;
+        $dailyLimit = Appointments::DAILY_FILE_LIMIT;
+
+        while ($daysSearched < $maxSearchDays) {
+            // Skip weekends
+            if ($currentDate->isWeekend()) {
+                $currentDate->addDay();
+                $daysSearched++;
+                continue;
+            }
+
+            // Check if there's an event on this date
+            $hasEvent = CalendarEvents::whereDate('event_date', $currentDate)->exists();
+            if ($hasEvent) {
+                $currentDate->addDay();
+                $daysSearched++;
+                continue;
+            }
+
+            // Check capacity for this date
+            $existingFilesCount = Appointments::whereDate('appointment_date', $currentDate)
+                ->sum('daily_file_count') ?: 0;
+
+            $availableCapacity = $dailyLimit - $existingFilesCount;
+
+            // If there's enough capacity, return this date
+            if ($availableCapacity >= $requiredFileCount) {
+                return $currentDate;
+            }
+
+            $currentDate->addDay();
+            $daysSearched++;
+        }
+
+        // If no available date found within search range, return null
+        return null;
     }
 
     /**
