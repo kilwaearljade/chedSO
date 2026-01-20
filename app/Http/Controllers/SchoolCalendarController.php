@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Appointments;
 use App\Models\CalendarEvents;
+use App\Rules\AppointmentDailyCapacityRule;
+use App\Rules\ValidAppointmentDate;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -81,51 +83,113 @@ class SchoolCalendarController extends Controller
     }
 
     /**
+     * Check available capacity for a specific date
+     */
+    public function checkDateCapacity(Request $request)
+    {
+        $date = $request->input('date');
+        $fileCount = $request->input('file_count', 1);
+
+        if (!$date) {
+            return response()->json([
+                'available' => false,
+                'message' => 'Date is required'
+            ], 400);
+        }
+
+        $appointmentDate = \Carbon\Carbon::parse($date);
+        $today = \Carbon\Carbon::today();
+
+        // Check if date is today or in the past
+        if ($appointmentDate->lte($today)) {
+            return response()->json([
+                'available' => false,
+                'capacity_used' => 0,
+                'capacity_available' => 0,
+                'capacity_total' => Appointments::DAILY_FILE_LIMIT,
+                'message' => 'Cannot create appointment for today or past dates.',
+                'reason' => 'past_or_today'
+            ]);
+        }
+
+        // Check if date is weekend
+        if ($appointmentDate->isWeekend()) {
+            return response()->json([
+                'available' => false,
+                'capacity_used' => 0,
+                'capacity_available' => 0,
+                'capacity_total' => Appointments::DAILY_FILE_LIMIT,
+                'message' => "Cannot create appointment on {$appointmentDate->format('l')}. Weekends are not allowed.",
+                'reason' => 'weekend'
+            ]);
+        }
+
+        // Check if there's an event on this date
+        $event = CalendarEvents::whereDate('event_date', $appointmentDate)->first();
+        if ($event) {
+            return response()->json([
+                'available' => false,
+                'capacity_used' => 0,
+                'capacity_available' => 0,
+                'capacity_total' => Appointments::DAILY_FILE_LIMIT,
+                'message' => "Cannot create appointment. Event '{$event->event_name}' is scheduled on this date.",
+                'reason' => 'event',
+                'event_name' => $event->event_name
+            ]);
+        }
+
+        // Calculate current capacity
+        $existingFilesCount = Appointments::whereDate('appointment_date', $appointmentDate)
+            ->sum('daily_file_count') ?: 0;
+
+        $dailyLimit = Appointments::DAILY_FILE_LIMIT;
+        $availableCapacity = $dailyLimit - $existingFilesCount;
+
+        // Check if there's enough capacity for the requested files
+        $hasCapacity = $availableCapacity >= $fileCount;
+
+        return response()->json([
+            'available' => $hasCapacity,
+            'capacity_used' => $existingFilesCount,
+            'capacity_available' => max(0, $availableCapacity),
+            'capacity_total' => $dailyLimit,
+            'requested_files' => $fileCount,
+            'message' => $hasCapacity 
+                ? "Available capacity: {$availableCapacity} files" 
+                : "Insufficient capacity. Only {$availableCapacity} files available, but {$fileCount} requested.",
+            'reason' => $hasCapacity ? 'available' : 'capacity_full'
+        ]);
+    }
+
+    /**
      * Store a newly created appointment with auto-split functionality
      */
     public function store(Request $request)
     {
         try {
+            $fileCount = $request->input('file_count');
+            $appointmentDate = $request->input('appointment_date');
+
             $validated = $request->validate([
                 'school_name' => 'required|string|max:255',
-                'appointment_date' => 'required|date',
+                'appointment_date' => [
+                    'required',
+                    'date',
+                    new ValidAppointmentDate(),
+                ],
                 'reason' => 'nullable|string',
-                'file_count' => 'required|integer|min:1',
+                'file_count' => [
+                    'required',
+                    'integer',
+                    'min:1',
+                    'max:' . Appointments::MAX_FILES_PER_APPOINTMENT,
+                    new AppointmentDailyCapacityRule($fileCount, $appointmentDate),
+                ],
             ]);
 
             $fileCount = $validated['file_count'];
             $startDate = \Carbon\Carbon::parse($validated['appointment_date']);
-            $today = \Carbon\Carbon::today();
-
-            // Check if appointment date is today
-            if ($startDate->isSameDay($today)) {
-                if ($request->expectsJson() || $request->wantsJson()) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Cannot create appointment for today. Please select a future date."
-                    ], 422);
-                }
-                return redirect()->back()->withErrors([
-                    'appointment_date' => "Cannot create appointment for today. Please select a future date."
-                ])->withInput();
-            }
-
-            $dailyLimit = 200; // Maximum files per day across all schools
-
-            // Check if there's an event on the requested date
-            $hasEventOnDate = CalendarEvents::whereDate('event_date', $startDate)->exists();
-            if ($hasEventOnDate) {
-                $event = CalendarEvents::whereDate('event_date', $startDate)->first();
-                if ($request->expectsJson() || $request->wantsJson()) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Cannot create appointment on {$startDate->format('M d, Y')}. An event '{$event->event_name}' is scheduled on this date."
-                    ], 422);
-                }
-                return redirect()->back()->withErrors([
-                    'appointment_date' => "Cannot create appointment on {$startDate->format('M d, Y')}. An event '{$event->event_name}' is scheduled on this date."
-                ])->withInput();
-            }
+            $dailyLimit = Appointments::DAILY_FILE_LIMIT;
 
             // Calculate how many days needed
             $appointments = [];

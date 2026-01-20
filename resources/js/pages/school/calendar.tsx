@@ -75,6 +75,21 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
     const [isDateSheetOpen, setIsDateSheetOpen] = useState(false);
     const [isAddAppointmentSheetOpen, setIsAddAppointmentSheetOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [capacityCheck, setCapacityCheck] = useState<{
+        available: boolean;
+        capacity_used: number;
+        capacity_available: number;
+        capacity_total: number;
+        message: string;
+        reason: string;
+        checking: boolean;
+    } | null>(null);
+    const [selectedDateCapacity, setSelectedDateCapacity] = useState<{
+        capacity_used: number;
+        capacity_available: number;
+        capacity_total: number;
+        is_full: boolean;
+    } | null>(null);
 
     // Form for creating appointments
     const { data, setData, post, processing, reset, errors } = useForm({
@@ -114,6 +129,47 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         }
     }, [selectedDateFull]);
 
+    // Check capacity when date or file count changes
+    useEffect(() => {
+        const checkCapacity = async () => {
+            if (!data.appointment_date || !data.file_count) {
+                setCapacityCheck(null);
+                return;
+            }
+
+            setCapacityCheck(prev => prev ? { ...prev, checking: true } : null);
+
+            try {
+                const response = await fetch(
+                    `/school/calendar/check-capacity?date=${data.appointment_date}&file_count=${data.file_count}`,
+                    {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                    }
+                );
+
+                if (response.ok) {
+                    const result = await response.json();
+                    setCapacityCheck({ ...result, checking: false });
+                } else {
+                    setCapacityCheck(null);
+                }
+            } catch (error) {
+                console.error('Error checking capacity:', error);
+                setCapacityCheck(null);
+            }
+        };
+
+        const timeoutId = setTimeout(() => {
+            checkCapacity();
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [data.appointment_date, data.file_count]);
+
     const navigateMonth = (direction: 'prev' | 'next') => {
         setCurrentDate(new Date(currentYear, currentMonth + (direction === 'next' ? 1 : -1), 1));
     };
@@ -132,12 +188,44 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         return allItems.filter(item => item.date === dateString);
     };
 
-    const handleDateClick = (day: number, monthOffset: number = 0) => {
+    const handleDateClick = async (day: number, monthOffset: number = 0) => {
         const newDate = new Date(currentYear, currentMonth + monthOffset, day);
         setCurrentDate(new Date(currentYear, currentMonth + monthOffset, 1));
         setSelectedDate(day);
         setSelectedDateFull(newDate);
         setIsDateSheetOpen(true);
+
+        // Check capacity for the selected date
+        const year = newDate.getFullYear();
+        const month = String(newDate.getMonth() + 1).padStart(2, '0');
+        const dayStr = String(newDate.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${dayStr}`;
+
+        try {
+            const response = await fetch(
+                `/school/calendar/check-capacity?date=${dateString}&file_count=1`,
+                {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                }
+            );
+
+            if (response.ok) {
+                const result = await response.json();
+                setSelectedDateCapacity({
+                    capacity_used: result.capacity_used,
+                    capacity_available: result.capacity_available,
+                    capacity_total: result.capacity_total,
+                    is_full: result.capacity_available === 0 || ['past_or_today', 'weekend', 'event'].includes(result.reason)
+                });
+            }
+        } catch (error) {
+            console.error('Error checking date capacity:', error);
+            setSelectedDateCapacity(null);
+        }
     };
 
     const getSelectedDateAppointments = () => {
@@ -152,14 +240,6 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
 
     const handleSubmitAppointment = (e: React.FormEvent) => {
         e.preventDefault();
-
-        // Check if selected date has an event
-        if (data.appointment_date && hasEventOnDate(data.appointment_date)) {
-            const event = getEventOnDate(data.appointment_date);
-            const errorMessage = `Cannot create appointment on this date. An event "${event?.name || 'Event'}" is scheduled on this date.`;
-            alert(errorMessage);
-            return;
-        }
 
         post('/school/calendar/appointments', {
             onSuccess: () => {
@@ -628,16 +708,72 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                     </CardTitle>
 
                                     {isSchool && (
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                setSelectedDateFull(new Date());
-                                                setIsAddAppointmentSheetOpen(true);
-                                            }}
-                                            disabled={selectedDateFull ? new Date(selectedDateFull).toDateString() === new Date().toDateString() : false}
-                                        >
-                                            <Plus className="mr-2 h-4 w-4" /> Add Appointment
-                                        </Button>
+                                        <div className="relative group">
+                                            <Button
+                                                variant="outline"
+                                                onClick={async () => {
+                                                    const today = new Date();
+                                                    setSelectedDateFull(today);
+                                                    
+                                                    // Check capacity before opening
+                                                    const year = today.getFullYear();
+                                                    const month = String(today.getMonth() + 1).padStart(2, '0');
+                                                    const day = String(today.getDate()).padStart(2, '0');
+                                                    const dateString = `${year}-${month}-${day}`;
+                                                    
+                                                    try {
+                                                        const response = await fetch(
+                                                            `/school/calendar/check-capacity?date=${dateString}&file_count=1`,
+                                                            {
+                                                                headers: {
+                                                                    'Accept': 'application/json',
+                                                                    'X-Requested-With': 'XMLHttpRequest',
+                                                                },
+                                                                credentials: 'same-origin',
+                                                            }
+                                                        );
+                                                        
+                                                        if (response.ok) {
+                                                            const result = await response.json();
+                                                            setSelectedDateCapacity({
+                                                                capacity_used: result.capacity_used,
+                                                                capacity_available: result.capacity_available,
+                                                                capacity_total: result.capacity_total,
+                                                                is_full: result.capacity_available === 0 || ['past_or_today', 'weekend', 'event'].includes(result.reason)
+                                                            });
+                                                        }
+                                                    } catch (error) {
+                                                        console.error('Error checking capacity:', error);
+                                                    }
+                                                    
+                                                    setIsAddAppointmentSheetOpen(true);
+                                                }}
+                                                disabled={
+                                                    (selectedDateFull && new Date(selectedDateFull).toDateString() === new Date().toDateString()) ||
+                                                    (selectedDateCapacity && selectedDateCapacity.is_full)
+                                                }
+                                                title={
+                                                    selectedDateCapacity?.is_full 
+                                                        ? `Date is full (${selectedDateCapacity.capacity_used}/${selectedDateCapacity.capacity_total} files used)` 
+                                                        : selectedDateCapacity 
+                                                            ? `Available: ${selectedDateCapacity.capacity_available}/${selectedDateCapacity.capacity_total} files`
+                                                            : 'Add new appointment'
+                                                }
+                                            >
+                                                <Plus className="mr-2 h-4 w-4" /> Add Appointment
+                                            </Button>
+                                            {selectedDateCapacity && (
+                                                <span className={`absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${
+                                                    selectedDateCapacity.is_full 
+                                                        ? 'bg-red-500 text-white' 
+                                                        : selectedDateCapacity.capacity_available < 50 
+                                                            ? 'bg-yellow-500 text-white' 
+                                                            : 'bg-green-500 text-white'
+                                                }`}>
+                                                    {selectedDateCapacity.capacity_available}
+                                                </span>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             </CardHeader>
@@ -723,16 +859,35 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                         </div>
                                         <SheetFooter className="mt-6 flex-col sm:flex-row gap-2">
                                             {isSchool && (
-                                                <Button
-                                                    onClick={() => {
-                                                        setIsDateSheetOpen(false);
-                                                        setIsAddAppointmentSheetOpen(true);
-                                                    }}
-                                                    disabled={selectedDateFull ? new Date(selectedDateFull).toDateString() === new Date().toDateString() : false}
-                                                    className="w-full sm:w-auto"
-                                                >
-                                                    <Plus className="mr-2 h-4 w-4" /> Add Appointment
-                                                </Button>
+                                                <div className="flex flex-col gap-2 w-full sm:w-auto">
+                                                    <Button
+                                                        onClick={() => {
+                                                            setIsDateSheetOpen(false);
+                                                            setIsAddAppointmentSheetOpen(true);
+                                                        }}
+                                                        disabled={
+                                                            (selectedDateFull && new Date(selectedDateFull).toDateString() === new Date().toDateString()) ||
+                                                            (selectedDateCapacity && selectedDateCapacity.is_full)
+                                                        }
+                                                        className="w-full sm:w-auto"
+                                                    >
+                                                        <Plus className="mr-2 h-4 w-4" /> Add Appointment
+                                                    </Button>
+                                                    {selectedDateCapacity && (
+                                                        <div className={`text-xs text-center p-2 rounded-md ${
+                                                            selectedDateCapacity.is_full 
+                                                                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300' 
+                                                                : selectedDateCapacity.capacity_available < 50 
+                                                                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300' 
+                                                                    : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                                        }`}>
+                                                            {selectedDateCapacity.is_full 
+                                                                ? `⛔ Date is full (${selectedDateCapacity.capacity_used}/${selectedDateCapacity.capacity_total} files)`
+                                                                : `✅ Available: ${selectedDateCapacity.capacity_available}/${selectedDateCapacity.capacity_total} files`
+                                                            }
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
                                             <SheetClose asChild>
                                                 <Button variant="outline" className="w-full sm:w-auto">
@@ -773,13 +928,13 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                         value={data.appointment_date}
                                                         onChange={(e) => setData('appointment_date', e.target.value)}
                                                         required
-                                                        className={hasEventOnDate(data.appointment_date) ? 'border-destructive' : ''}
+                                                        className={hasEventOnDate(data.appointment_date) ? 'border-yellow-500' : ''}
                                                     />
                                                     {hasEventOnDate(data.appointment_date) && (
-                                                        <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-2 rounded-md">
+                                                        <div className="flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 p-2 rounded-md">
                                                             <AlertCircle className="h-4 w-4" />
                                                             <span>
-                                                                Cannot create appointment. An event "{getEventOnDate(data.appointment_date)?.name || 'Event'}" is scheduled on this date.
+                                                                Warning: An event "{getEventOnDate(data.appointment_date)?.name || 'Event'}" is scheduled on this date.
                                                             </span>
                                                         </div>
                                                     )}
@@ -807,6 +962,83 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                         required
                                                     />
                                                     <InputError message={errors.file_count} />
+                                                    
+                                                    {/* Capacity Check Display */}
+                                                    {capacityCheck && !capacityCheck.checking && (
+                                                        <div className={`flex flex-col gap-2 p-3 rounded-md border ${
+                                                            capacityCheck.available 
+                                                                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
+                                                                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                                                        }`}>
+                                                            <div className="flex items-center gap-2">
+                                                                <AlertCircle className={`h-4 w-4 ${
+                                                                    capacityCheck.available 
+                                                                        ? 'text-green-600 dark:text-green-400' 
+                                                                        : 'text-red-600 dark:text-red-400'
+                                                                }`} />
+                                                                <span className={`text-sm font-medium ${
+                                                                    capacityCheck.available 
+                                                                        ? 'text-green-700 dark:text-green-300' 
+                                                                        : 'text-red-700 dark:text-red-300'
+                                                                }`}>
+                                                                    {capacityCheck.message}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            {capacityCheck.reason === 'available' && (
+                                                                <div className="text-xs text-muted-foreground space-y-1">
+                                                                    <div className="flex justify-between">
+                                                                        <span>Used:</span>
+                                                                        <span className="font-medium">{capacityCheck.capacity_used} files</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between">
+                                                                        <span>Available:</span>
+                                                                        <span className="font-medium text-green-600 dark:text-green-400">
+                                                                            {capacityCheck.capacity_available} files
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex justify-between">
+                                                                        <span>Total Capacity:</span>
+                                                                        <span className="font-medium">{capacityCheck.capacity_total} files/day</span>
+                                                                    </div>
+                                                                    <div className="mt-2 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                                        <div 
+                                                                            className="h-full bg-green-500 transition-all" 
+                                                                            style={{ 
+                                                                                width: `${(capacityCheck.capacity_used / capacityCheck.capacity_total) * 100}%` 
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {capacityCheck.reason === 'capacity_full' && (
+                                                                <div className="text-xs text-muted-foreground space-y-1">
+                                                                    <div className="flex justify-between">
+                                                                        <span>Requested:</span>
+                                                                        <span className="font-medium">{capacityCheck.requested_files} files</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between">
+                                                                        <span>Available:</span>
+                                                                        <span className="font-medium text-red-600 dark:text-red-400">
+                                                                            {capacityCheck.capacity_available} files only
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
+                                                                        💡 The system will auto-split to next available days
+                                                                    </p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {capacityCheck?.checking && (
+                                                        <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
+                                                            <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                                                            <span>Checking availability...</span>
+                                                        </div>
+                                                    )}
+                                                    
                                                     <p className="text-xs text-muted-foreground">
                                                         ℹ️ If over 200 files, appointments will be automatically split across multiple days (max 200/day, skipping weekends and dates with events)
                                                     </p>
@@ -815,7 +1047,11 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                             <SheetFooter className="mt-6">
                                                 <Button
                                                     type="submit"
-                                                    disabled={processing || (!!data.appointment_date && hasEventOnDate(data.appointment_date))}
+                                                    disabled={
+                                                        processing || 
+                                                        (capacityCheck && !capacityCheck.available && 
+                                                         ['past_or_today', 'weekend', 'event'].includes(capacityCheck.reason))
+                                                    }
                                                 >
                                                     {processing ? 'Saving...' : 'Save Appointment'}
                                                 </Button>
