@@ -58,7 +58,7 @@ class MessageController extends Controller
         $conversationsMap = [];
         foreach ($allMessages as $message) {
             $otherUserId = $message->sender_id === $user->id ? $message->receiver_id : $message->sender_id;
-            
+
             if (!isset($conversationsMap[$otherUserId])) {
                 $conversationsMap[$otherUserId] = [
                     'other_user_id' => $otherUserId,
@@ -185,7 +185,7 @@ class MessageController extends Controller
     public function store(Request $request)
     {
         $user = Auth::user();
-        
+
         $validated = $request->validate([
             'receiver_id' => ['required', 'exists:users,id'],
             'message' => ['required', 'string', 'max:5000'],
@@ -222,7 +222,7 @@ class MessageController extends Controller
         if ($user->role === 'school' && $receiver->role === 'admin') {
             // Get admin response
             $adminResponse = $this->getAdminResponse($validated['message']);
-            
+
             // Create auto-response from admin
             $autoResponse = Message::create([
                 'sender_id' => $receiver->id,

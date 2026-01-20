@@ -15,7 +15,7 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
         $perPage = $request->get('per_page', 20);
-        
+
         $notifications = Notification::where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);
@@ -30,7 +30,7 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
         $limit = $request->get('limit', 10);
-        
+
         $notifications = Notification::where('user_id', $user->id)
             ->where('is_read', false)
             ->orderBy('created_at', 'desc')

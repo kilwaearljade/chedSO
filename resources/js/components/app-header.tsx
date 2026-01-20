@@ -133,12 +133,12 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const page = usePage<SharedData>();
     const { auth } = page.props;
     const getInitials = useInitials();
-    const { 
-        notifications, 
-        unreadCount, 
-        markAsRead, 
+    const {
+        notifications,
+        unreadCount,
+        markAsRead,
         deleteNotification,
-        fetchUnreadNotifications 
+        fetchUnreadNotifications
     } = useNotifications({ pollInterval: 10000 });
 
     // Fetch notifications on mount
@@ -370,7 +370,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                     ) : (
                                         notifications.map((notification, index) => (
                                             <React.Fragment key={notification.id}>
-                                                <DropdownMenuItem 
+                                                <DropdownMenuItem
                                                     className="flex flex-col items-start p-3 cursor-pointer hover:bg-accent"
                                                     onClick={() => handleNotificationClick(notification)}
                                                 >
