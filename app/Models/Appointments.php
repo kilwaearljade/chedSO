@@ -17,8 +17,9 @@ class Appointments extends Model
 
     /**
      * Maximum number of files that can be uploaded in a single appointment
+     * This will be automatically split across multiple days (200 files per day)
      */
-    const MAX_FILES_PER_APPOINTMENT = 200;
+    const MAX_FILES_PER_APPOINTMENT = 10000;
 
     protected $fillable = [
         'school_name',

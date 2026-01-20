@@ -956,6 +956,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                         id="file_count"
                                                         type="number"
                                                         min="1"
+                                                        max="10000"
                                                         placeholder="Enter number of files"
                                                         value={data.file_count}
                                                         onChange={(e) => setData('file_count', parseInt(e.target.value) || 1)}
@@ -1040,7 +1041,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     )}
                                                     
                                                     <p className="text-xs text-muted-foreground">
-                                                        ℹ️ If over 200 files, appointments will be automatically split across multiple days (max 200/day, skipping weekends and dates with events)
+                                                        ℹ️ Appointments over 200 files will be automatically split across multiple days (200 files/day max, skipping weekends and event dates). Your selected date will receive the first 200 files.
                                                     </p>
                                                 </div>
                                             </div>
