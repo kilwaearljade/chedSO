@@ -191,11 +191,12 @@ class SchoolCalendarController extends Controller
             $startDate = \Carbon\Carbon::parse($validated['appointment_date']);
             $dailyLimit = Appointments::DAILY_FILE_LIMIT;
 
-            // Calculate how many days needed
+            // Calculate how many days needed and split appointments
             $appointments = [];
             $remainingFiles = $fileCount;
             $currentDate = $startDate->copy();
             $splitSequence = 1;
+            $isFirstAppointment = true;
 
             // Keep track of the parent appointment ID
             $parentAppointment = null;
@@ -226,7 +227,16 @@ class SchoolCalendarController extends Controller
                 }
 
                 // Calculate files for this day
-                $filesForThisDay = min($remainingFiles, $availableCapacity);
+                // For the first appointment (on selected date), try to place as many files as possible up to daily limit
+                // For subsequent appointments, place up to 200 files per day based on available capacity
+                if ($isFirstAppointment) {
+                    // First appointment: place min(remainingFiles, availableCapacity, dailyLimit) on selected date
+                    $filesForThisDay = min($remainingFiles, $availableCapacity, $dailyLimit);
+                    $isFirstAppointment = false;
+                } else {
+                    // Subsequent appointments: place min(remainingFiles, availableCapacity) per day
+                    $filesForThisDay = min($remainingFiles, $availableCapacity);
+                }
 
                 // Create appointment for this day
                 $appointment = Appointments::create([
