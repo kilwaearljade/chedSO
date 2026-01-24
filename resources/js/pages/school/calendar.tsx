@@ -96,7 +96,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         school_name: '',
         appointment_date: '',
         reason: '',
-        file_count: 1,
+        file_count: 0,
     });
 
     // Helper function to check if a date has an event
@@ -714,13 +714,13 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                 onClick={async () => {
                                                     const today = new Date();
                                                     setSelectedDateFull(today);
-                                                    
+
                                                     // Check capacity before opening
                                                     const year = today.getFullYear();
                                                     const month = String(today.getMonth() + 1).padStart(2, '0');
                                                     const day = String(today.getDate()).padStart(2, '0');
                                                     const dateString = `${year}-${month}-${day}`;
-                                                    
+
                                                     try {
                                                         const response = await fetch(
                                                             `/school/calendar/check-capacity?date=${dateString}&file_count=1`,
@@ -732,7 +732,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                                 credentials: 'same-origin',
                                                             }
                                                         );
-                                                        
+
                                                         if (response.ok) {
                                                             const result = await response.json();
                                                             setSelectedDateCapacity({
@@ -745,7 +745,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     } catch (error) {
                                                         console.error('Error checking capacity:', error);
                                                     }
-                                                    
+
                                                     setIsAddAppointmentSheetOpen(true);
                                                 }}
                                                 disabled={
@@ -753,9 +753,9 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     (selectedDateCapacity && selectedDateCapacity.is_full)
                                                 }
                                                 title={
-                                                    selectedDateCapacity?.is_full 
-                                                        ? `Date is full (${selectedDateCapacity.capacity_used}/${selectedDateCapacity.capacity_total} files used)` 
-                                                        : selectedDateCapacity 
+                                                    selectedDateCapacity?.is_full
+                                                        ? `Date is full (${selectedDateCapacity.capacity_used}/${selectedDateCapacity.capacity_total} files used)`
+                                                        : selectedDateCapacity
                                                             ? `Available: ${selectedDateCapacity.capacity_available}/${selectedDateCapacity.capacity_total} files`
                                                             : 'Add new appointment'
                                                 }
@@ -764,10 +764,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                             </Button>
                                             {selectedDateCapacity && (
                                                 <span className={`absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${
-                                                    selectedDateCapacity.is_full 
-                                                        ? 'bg-red-500 text-white' 
-                                                        : selectedDateCapacity.capacity_available < 50 
-                                                            ? 'bg-yellow-500 text-white' 
+                                                    selectedDateCapacity.is_full
+                                                        ? 'bg-red-500 text-white'
+                                                        : selectedDateCapacity.capacity_available < 50
+                                                            ? 'bg-yellow-500 text-white'
                                                             : 'bg-green-500 text-white'
                                                 }`}>
                                                     {selectedDateCapacity.capacity_available}
@@ -875,13 +875,13 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     </Button>
                                                     {selectedDateCapacity && (
                                                         <div className={`text-xs text-center p-2 rounded-md ${
-                                                            selectedDateCapacity.is_full 
-                                                                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300' 
-                                                                : selectedDateCapacity.capacity_available < 50 
-                                                                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300' 
+                                                            selectedDateCapacity.is_full
+                                                                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                                                                : selectedDateCapacity.capacity_available < 50
+                                                                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300'
                                                                     : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
                                                         }`}>
-                                                            {selectedDateCapacity.is_full 
+                                                            {selectedDateCapacity.is_full
                                                                 ? `⛔ Date is full (${selectedDateCapacity.capacity_used}/${selectedDateCapacity.capacity_total} files)`
                                                                 : `✅ Available: ${selectedDateCapacity.capacity_available}/${selectedDateCapacity.capacity_total} files`
                                                             }
@@ -910,10 +910,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                         <form onSubmit={handleSubmitAppointment}>
                                             <div className="grid flex-1 auto-rows-min gap-6 px-4 mt-6">
                                                 <div className="grid gap-3">
-                                                    <Label htmlFor="school_name">Appointment Title</Label>
+                                                    <Label htmlFor="school_name">School Name</Label>
                                                     <Input
                                                         id="school_name"
-                                                        placeholder="Enter appointment title"
+                                                        placeholder="Enter School"
                                                         value={data.school_name}
                                                         onChange={(e) => setData('school_name', e.target.value)}
                                                         required
@@ -941,10 +941,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     <InputError message={errors.appointment_date} />
                                                 </div>
                                                 <div className="grid gap-3">
-                                                    <Label htmlFor="reason">Description (optional)</Label>
+                                                    <Label htmlFor="reason">Purpose</Label>
                                                     <textarea
                                                         id="reason"
-                                                        placeholder="Enter appointment description"
+                                                        placeholder="Enter appointment Purpose"
                                                         className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                                         value={data.reason}
                                                         onChange={(e) => setData('reason', e.target.value)}
@@ -955,7 +955,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     <Input
                                                         id="file_count"
                                                         type="number"
-                                                        min="1"
+                                                        min="0"
                                                         max="10000"
                                                         placeholder="Enter number of files"
                                                         value={data.file_count}
@@ -963,29 +963,29 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                         required
                                                     />
                                                     <InputError message={errors.file_count} />
-                                                    
+
                                                     {/* Capacity Check Display */}
                                                     {capacityCheck && !capacityCheck.checking && (
                                                         <div className={`flex flex-col gap-2 p-3 rounded-md border ${
-                                                            capacityCheck.available 
-                                                                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
+                                                            capacityCheck.available
+                                                                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                                                                 : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
                                                         }`}>
                                                             <div className="flex items-center gap-2">
                                                                 <AlertCircle className={`h-4 w-4 ${
-                                                                    capacityCheck.available 
-                                                                        ? 'text-green-600 dark:text-green-400' 
+                                                                    capacityCheck.available
+                                                                        ? 'text-green-600 dark:text-green-400'
                                                                         : 'text-red-600 dark:text-red-400'
                                                                 }`} />
                                                                 <span className={`text-sm font-medium ${
-                                                                    capacityCheck.available 
-                                                                        ? 'text-green-700 dark:text-green-300' 
+                                                                    capacityCheck.available
+                                                                        ? 'text-green-700 dark:text-green-300'
                                                                         : 'text-red-700 dark:text-red-300'
                                                                 }`}>
                                                                     {capacityCheck.message}
                                                                 </span>
                                                             </div>
-                                                            
+
                                                             {capacityCheck.reason === 'available' && (
                                                                 <div className="text-xs text-muted-foreground space-y-1">
                                                                     <div className="flex justify-between">
@@ -1003,10 +1003,10 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                                         <span className="font-medium">{capacityCheck.capacity_total} files/day</span>
                                                                     </div>
                                                                     <div className="mt-2 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                                                        <div 
-                                                                            className="h-full bg-green-500 transition-all" 
-                                                                            style={{ 
-                                                                                width: `${(capacityCheck.capacity_used / capacityCheck.capacity_total) * 100}%` 
+                                                                        <div
+                                                                            className="h-full bg-green-500 transition-all"
+                                                                            style={{
+                                                                                width: `${(capacityCheck.capacity_used / capacityCheck.capacity_total) * 100}%`
                                                                             }}
                                                                         />
                                                                     </div>
@@ -1032,14 +1032,14 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                             )}
                                                         </div>
                                                     )}
-                                                    
+
                                                     {capacityCheck?.checking && (
                                                         <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
                                                             <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
                                                             <span>Checking availability...</span>
                                                         </div>
                                                     )}
-                                                    
+
                                                     <p className="text-xs text-muted-foreground">
                                                         ℹ️ Appointments over 200 files will be automatically split across multiple days (200 files/day max, skipping weekends and event dates). Your selected date will receive the first 200 files.
                                                     </p>
@@ -1049,8 +1049,8 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                 <Button
                                                     type="submit"
                                                     disabled={
-                                                        processing || 
-                                                        (capacityCheck && !capacityCheck.available && 
+                                                        processing ||
+                                                        (capacityCheck && !capacityCheck.available &&
                                                          ['past_or_today', 'weekend', 'event'].includes(capacityCheck.reason))
                                                     }
                                                 >
