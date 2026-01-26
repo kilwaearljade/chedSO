@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\FeedbackSubmitted;
 use App\Models\FeedBack;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -19,11 +20,14 @@ class SchoolFeedBack extends Controller
             'comment' => ['required', 'string', 'min:10', 'max:1000'],
         ]);
 
-        FeedBack::create([
+        $feedback = FeedBack::create([
             'rating' => $validated['rating'],
             'comment' => $validated['comment'],
             'status' => 'New',
         ]);
+
+        // Notify admins about new feedback
+        FeedbackSubmitted::dispatch($feedback, "New feedback received with {$feedback->rating} star rating");
 
         return redirect()->route('schoolfeedback')
             ->with('status', 'Thank you! Your feedback has been submitted successfully.');

@@ -5,11 +5,13 @@ namespace App\Providers;
 use App\Events\AppointmentConfirmed;
 use App\Events\AppointmentCreated;
 use App\Events\EventCreated;
+use App\Events\FeedbackSubmitted;
 use App\Events\MessageSent;
 use App\Events\UserRegistered;
 use App\Listeners\NotifyAppointmentConfirmed;
 use App\Listeners\NotifyAppointmentCreated;
 use App\Listeners\NotifyEventCreated;
+use App\Listeners\NotifyFeedbackSubmitted;
 use App\Listeners\NotifyMessageSent;
 use App\Listeners\NotifyUserRegistered;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -36,6 +38,9 @@ class EventServiceProvider extends ServiceProvider
         ],
         UserRegistered::class => [
             NotifyUserRegistered::class,
+        ],
+        FeedbackSubmitted::class => [
+            NotifyFeedbackSubmitted::class,
         ],
     ];
 
