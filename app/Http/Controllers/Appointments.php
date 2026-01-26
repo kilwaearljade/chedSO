@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Events\AppointmentConfirmed;
 use App\Events\AppointmentCreated;
 use App\Models\Appointments as AppointmentsModel;
+use App\Models\Notification;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -55,11 +57,54 @@ class Appointments extends Controller
             'status' => 'required|in:pending,complete,cancelled',
         ]);
 
+        $oldStatus = $appointment->status;
+        $newStatus = $validated['status'];
+
         $appointment->update([
-            'status' => $validated['status'],
+            'status' => $newStatus,
         ]);
 
-        return redirect()->back()->with('success', 'Appointment status updated successfully');
+        // Send notification to school user if status changed to complete or cancelled
+        if ($oldStatus !== $newStatus && ($newStatus === 'complete' || $newStatus === 'cancelled')) {
+            $schoolUser = User::find($appointment->assigned_by);
+            
+            if ($schoolUser) {
+                $title = $newStatus === 'complete' 
+                    ? 'Appointment Completed' 
+                    : 'Appointment Cancelled';
+                
+                $message = $newStatus === 'complete'
+                    ? "Your appointment for {$appointment->school_name} has been marked as complete."
+                    : "Your appointment for {$appointment->school_name} has been cancelled.";
+
+                Notification::create([
+                    'user_id' => $schoolUser->id,
+                    'type' => $newStatus === 'complete' ? 'appointment_completed' : 'appointment_cancelled',
+                    'title' => $title,
+                    'message' => $message,
+                    'notifiable_type' => 'App\\Models\\Appointments',
+                    'notifiable_id' => $appointment->id,
+                    'is_read' => false,
+                    'data' => [
+                        'appointment_id' => $appointment->id,
+                        'school_name' => $appointment->school_name,
+                        'appointment_date' => $appointment->appointment_date?->format('Y-m-d'),
+                        'status' => $newStatus,
+                        'file_count' => $appointment->file_count,
+                    ],
+                ]);
+            }
+        }
+
+        // Preserve query parameters from referrer if available
+        $referrer = $request->header('referer');
+        $queryParams = [];
+        
+        if ($referrer && parse_url($referrer, PHP_URL_QUERY)) {
+            parse_str(parse_url($referrer, PHP_URL_QUERY), $queryParams);
+        }
+
+        return redirect()->route('appointment.index', $queryParams)->with('success', 'Appointment status updated successfully');
     }
 
     /**
@@ -135,6 +180,28 @@ class Appointments extends Controller
         $appointment->update([
             'status' => 'cancelled',
         ]);
+
+        // Send notification to school user
+        $schoolUser = User::find($appointment->assigned_by);
+        
+        if ($schoolUser) {
+            Notification::create([
+                'user_id' => $schoolUser->id,
+                'type' => 'appointment_cancelled',
+                'title' => 'Appointment Declined',
+                'message' => "Your appointment for {$appointment->school_name} has been declined.",
+                'notifiable_type' => 'App\\Models\\Appointments',
+                'notifiable_id' => $appointment->id,
+                'is_read' => false,
+                'data' => [
+                    'appointment_id' => $appointment->id,
+                    'school_name' => $appointment->school_name,
+                    'appointment_date' => $appointment->appointment_date?->format('Y-m-d'),
+                    'status' => 'cancelled',
+                    'file_count' => $appointment->file_count,
+                ],
+            ]);
+        }
 
         return redirect()->back()->with('success', 'Appointment declined successfully');
     }

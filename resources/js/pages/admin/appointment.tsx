@@ -1,5 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
+import { index as appointmentIndex, status as appointmentStatus, destroy as appointmentDestroy } from '@/routes/appointment';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,8 +16,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-declare function route(name: string, params?: any): string;
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -78,73 +85,49 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
     const [searchQuery, setSearchQuery] = useState(filters?.search || '');
     const [statusFilter, setStatusFilter] = useState<string>(filters?.status || 'all');
     const [dateFilter, setDateFilter] = useState(filters?.date || '');
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
     const handleFilter = () => {
         router.get(
-            route('appointment.index'),
-            {
-                search: searchQuery || undefined,
-                status: statusFilter !== 'all' ? statusFilter : undefined,
-                date: dateFilter || undefined,
-            },
+            appointmentIndex.url({
+                query: {
+                    search: searchQuery || undefined,
+                    status: statusFilter !== 'all' ? statusFilter : undefined,
+                    date: dateFilter || undefined,
+                }
+            }),
+            {},
             { preserveState: true, preserveScroll: true }
         );
     };
 
-    const handleStatusUpdate = (appointmentId: number, newStatus: string) => {
+    const handleStatusUpdate = (appointmentId: number, newStatus: 'pending' | 'complete' | 'cancelled') => {
         router.patch(
-            route('appointment.status', appointmentId),
+            appointmentStatus.url(appointmentId),
             { status: newStatus },
             {
-                preserveState: true,
                 preserveScroll: true,
+                only: ['appointments'],
+                onSuccess: () => {
+                    // Status updated successfully
+                },
                 onError: (errors) => {
                     console.error('Failed to update status:', errors);
+                    alert('Failed to update appointment status. Please try again.');
                 },
             }
         );
     };
 
-    const handleApprove = (appointmentId: number) => {
-        if (confirm('Are you sure you want to approve this appointment?')) {
-            router.patch(
-                route('appointment.approve', appointmentId),
-                {},
-                {
-                    preserveState: true,
-                    preserveScroll: true,
-                    onError: (errors) => {
-                        console.error('Failed to approve:', errors);
-                    },
-                }
-            );
-        }
-    };
-
-    const handleDecline = (appointmentId: number) => {
-        if (confirm('Are you sure you want to decline this appointment?')) {
-            router.patch(
-                route('appointment.decline', appointmentId),
-                {},
-                {
-                    preserveState: true,
-                    preserveScroll: true,
-                    onError: (errors) => {
-                        console.error('Failed to decline:', errors);
-                    },
-                }
-            );
-        }
-    };
-
     const handleDelete = (appointmentId: number) => {
         if (confirm('Are you sure you want to delete this appointment?')) {
             router.delete(
-                route('appointment.destroy', appointmentId),
+                appointmentDestroy.url(appointmentId),
                 {
                     preserveState: true,
                     preserveScroll: true,
-                    onError: (errors) => {
+                    onError: (errors: any) => {
                         console.error('Failed to delete:', errors);
                     },
                 }
@@ -155,13 +138,15 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
     const handlePrevious = () => {
         if (appointments.current_page > 1) {
             router.get(
-                route('appointment.index'),
-                {
-                    search: searchQuery || undefined,
-                    status: statusFilter !== 'all' ? statusFilter : undefined,
-                    date: dateFilter || undefined,
-                    page: appointments.current_page - 1,
-                },
+                appointmentIndex.url({
+                    query: {
+                        search: searchQuery || undefined,
+                        status: statusFilter !== 'all' ? statusFilter : undefined,
+                        date: dateFilter || undefined,
+                        page: appointments.current_page - 1,
+                    }
+                }),
+                {},
                 { preserveState: true }
             );
         }
@@ -170,20 +155,23 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
     const handleNext = () => {
         if (appointments.current_page < appointments.last_page) {
             router.get(
-                route('appointment.index'),
-                {
-                    search: searchQuery || undefined,
-                    status: statusFilter !== 'all' ? statusFilter : undefined,
-                    date: dateFilter || undefined,
-                    page: appointments.current_page + 1,
-                },
+                appointmentIndex.url({
+                    query: {
+                        search: searchQuery || undefined,
+                        status: statusFilter !== 'all' ? statusFilter : undefined,
+                        date: dateFilter || undefined,
+                        page: appointments.current_page + 1,
+                    }
+                }),
+                {},
                 { preserveState: true }
             );
         }
     };
 
-    const handleViewDetails = (appointmentId: number) => {
-        router.visit(route('appointment.show', appointmentId));
+    const handleViewDetails = (appointment: Appointment) => {
+        setSelectedAppointment(appointment);
+        setDetailsOpen(true);
     };
 
     return (
@@ -232,12 +220,14 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
                                 onChange={(e) => {
                                     setStatusFilter(e.target.value);
                                     router.get(
-                                        route('appointment.index'),
-                                        {
-                                            search: searchQuery || undefined,
-                                            status: e.target.value !== 'all' ? e.target.value : undefined,
-                                            date: dateFilter || undefined,
-                                        },
+                                        appointmentIndex.url({
+                                            query: {
+                                                search: searchQuery || undefined,
+                                                status: e.target.value !== 'all' ? e.target.value : undefined,
+                                                date: dateFilter || undefined,
+                                            }
+                                        }),
+                                        {},
                                         { preserveState: true }
                                     );
                                 }}
@@ -256,12 +246,14 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
                                 onChange={(e) => {
                                     setDateFilter(e.target.value);
                                     router.get(
-                                        route('appointment.index'),
-                                        {
-                                            search: searchQuery || undefined,
-                                            status: statusFilter !== 'all' ? statusFilter : undefined,
-                                            date: e.target.value || undefined,
-                                        },
+                                        appointmentIndex.url({
+                                            query: {
+                                                search: searchQuery || undefined,
+                                                status: statusFilter !== 'all' ? statusFilter : undefined,
+                                                date: e.target.value || undefined,
+                                            }
+                                        }),
+                                        {},
                                         { preserveState: true }
                                     );
                                 }}
@@ -317,21 +309,6 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleApprove(appointment.id)}
-                                                        disabled={appointment.status === 'complete'}
-                                                        className="text-green-600"
-                                                    >
-                                                        Approve
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleDecline(appointment.id)}
-                                                        disabled={appointment.status === 'cancelled'}
-                                                        className="text-red-600"
-                                                    >
-                                                        Decline
-                                                    </DropdownMenuItem>
                                                     <DropdownMenuSeparator />
                                                     <DropdownMenuItem
                                                         onClick={() => handleStatusUpdate(appointment.id, 'pending')}
@@ -407,7 +384,7 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
                                         <Button
                                             variant="outline"
                                             className="w-full"
-                                            onClick={() => handleViewDetails(appointment.id)}
+                                            onClick={() => handleViewDetails(appointment)}
                                         >
                                             View Details
                                         </Button>
@@ -464,6 +441,131 @@ export default function Appointment({ appointments, filters }: AppointmentProps)
                         </CardContent>
                     </Card>
                 )}
+
+                <Dialog
+                    open={detailsOpen}
+                    onOpenChange={(open) => {
+                        setDetailsOpen(open);
+                        if (!open) setSelectedAppointment(null);
+                    }}
+                >
+                    <DialogContent className="sm:max-w-xl">
+                        <DialogHeader>
+                            <DialogTitle>Appointment Details</DialogTitle>
+                            <DialogDescription>
+                                {selectedAppointment?.user?.name ||
+                                    selectedAppointment?.school_name ||
+                                    'Appointment'}
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {selectedAppointment ? (
+                            <div className="grid gap-4">
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground">School</div>
+                                        <div className="font-medium">
+                                            {selectedAppointment.school_name}
+                                        </div>
+                                    </div>
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground">Status</div>
+                                        <div className="pt-1">
+                                            <Badge
+                                                variant={statusConfig[selectedAppointment.status].variant}
+                                                className={statusConfig[selectedAppointment.status].className}
+                                            >
+                                                {statusConfig[selectedAppointment.status].label}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground">Appointment Date</div>
+                                        <div className="font-medium">
+                                            {new Date(
+                                                selectedAppointment.appointment_date,
+                                            ).toLocaleString('en-US', {
+                                                year: 'numeric',
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: 'numeric',
+                                                minute: '2-digit',
+                                            })}
+                                        </div>
+                                    </div>
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground">Files</div>
+                                        <div className="font-medium">
+                                            {selectedAppointment.file_count}{' '}
+                                            {selectedAppointment.file_count === 1 ? 'file' : 'files'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-md border p-3">
+                                    <div className="text-xs text-muted-foreground">Reason</div>
+                                    <div className="mt-1 text-sm">
+                                        {selectedAppointment.reason || '—'}
+                                    </div>
+                                </div>
+
+                                {selectedAppointment.user?.name || selectedAppointment.user?.profile_photo_path ? (
+                                    <div className="rounded-md border p-3">
+                                        <div className="text-xs text-muted-foreground">Requested By</div>
+                                        <div className="mt-2 flex items-center gap-3">
+                                            {selectedAppointment.user?.profile_photo_path ? (
+                                                <img
+                                                    src={`/storage/${selectedAppointment.user.profile_photo_path}`}
+                                                    alt={selectedAppointment.user.name}
+                                                    className="h-10 w-10 rounded-full object-cover border"
+                                                />
+                                            ) : (
+                                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                                    <Building2 className="h-5 w-5 text-primary" />
+                                                </div>
+                                            )}
+                                            <div className="font-medium">
+                                                {selectedAppointment.user?.name}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : null}
+
+                        <DialogFooter>
+                            {selectedAppointment ? (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setDetailsOpen(false);
+                                            setSelectedAppointment(null);
+                                        }}
+                                    >
+                                        Close
+                                    </Button>
+                                    <Button
+                                        onClick={() => {
+                                            handleStatusUpdate(selectedAppointment.id, 'complete');
+                                            setDetailsOpen(false);
+                                            setSelectedAppointment(null);
+                                        }}
+                                    >
+                                        Mark as Complete
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button variant="outline" onClick={() => setDetailsOpen(false)}>
+                                    Close
+                                </Button>
+                            )}
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AppLayout>
     );

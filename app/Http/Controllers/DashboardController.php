@@ -112,9 +112,68 @@ class DashboardController extends Controller
             ];
         }
 
+        // Recent activity data for table (last 50 items)
+        $activityData = [];
+        
+        // Get recent users (last 20)
+        $recentUsers = User::where('role', 'school')
+            ->orderBy('created_at', 'desc')
+            ->take(20)
+            ->get()
+            ->map(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'type' => 'user',
+                    'name' => $user->name,
+                    'details' => 'New school registration - ' . $user->email,
+                    'status' => $user->is_approve ? 'approved' : 'pending',
+                    'createdAt' => $user->created_at->toIso8601String(),
+                ];
+            });
+
+        // Get recent appointments (last 20)
+        $recentAppointments = Appointments::orderBy('created_at', 'desc')
+            ->take(20)
+            ->get()
+            ->map(function ($appointment) {
+                return [
+                    'id' => $appointment->id,
+                    'type' => 'appointment',
+                    'name' => $appointment->school_name,
+                    'details' => ($appointment->reason ?: 'Appointment') . ' - ' . $appointment->file_count . ' file(s)',
+                    'status' => $appointment->status,
+                    'createdAt' => $appointment->created_at->toIso8601String(),
+                ];
+            });
+
+        // Get recent feedbacks (last 20)
+        $recentFeedbacks = FeedBack::orderBy('created_at', 'desc')
+            ->take(20)
+            ->get()
+            ->map(function ($feedback) {
+                return [
+                    'id' => $feedback->id,
+                    'type' => 'feedback',
+                    'name' => 'User Feedback',
+                    'details' => ($feedback->comment ? substr($feedback->comment, 0, 100) : 'No comment') . ' - Rating: ' . $feedback->rating . '/5',
+                    'status' => $feedback->status ?? 'submitted',
+                    'createdAt' => $feedback->created_at->toIso8601String(),
+                ];
+            });
+
+        // Combine all activities and sort by created_at
+        $activityData = $recentUsers
+            ->concat($recentAppointments)
+            ->concat($recentFeedbacks)
+            ->sortByDesc('createdAt')
+            ->take(50)
+            ->values()
+            ->all();
+
         return Inertia::render('admin/dashboard', [
             'cardsData' => $cardsData,
             'chartData' => $chartData,
+            'activityData' => $activityData,
         ]);
     }
 }
