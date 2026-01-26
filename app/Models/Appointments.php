@@ -50,6 +50,21 @@ class Appointments extends Model
         'updated_at'       => 'datetime',
     ];
 
+    /**
+     * Boot the model and add mutator to ensure daily_file_count never exceeds DAILY_FILE_LIMIT
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Ensure daily_file_count is always capped at DAILY_FILE_LIMIT (200)
+        static::saving(function ($appointment) {
+            if ($appointment->daily_file_count !== null) {
+                $appointment->daily_file_count = min($appointment->daily_file_count, self::DAILY_FILE_LIMIT);
+            }
+        });
+    }
+
     public function user()
     {
         return $this->belongsTo(\App\Models\User::class, 'assigned_by');

@@ -6,6 +6,7 @@ use App\Models\Appointments;
 use App\Models\CalendarEvents;
 use App\Rules\AppointmentDailyCapacityRule;
 use App\Rules\ValidAppointmentDate;
+use App\Events\AppointmentCreated;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -154,8 +155,8 @@ class SchoolCalendarController extends Controller
             'capacity_available' => max(0, $availableCapacity),
             'capacity_total' => $dailyLimit,
             'requested_files' => $fileCount,
-            'message' => $hasCapacity 
-                ? "Available capacity: {$availableCapacity} files" 
+            'message' => $hasCapacity
+                ? "Available capacity: {$availableCapacity} files"
                 : "Insufficient capacity. Only {$availableCapacity} files available, but {$fileCount} requested.",
             'reason' => $hasCapacity ? 'available' : 'capacity_full'
         ]);
@@ -167,153 +168,247 @@ class SchoolCalendarController extends Controller
     public function store(Request $request)
     {
         try {
-            $fileCount = $request->input('file_count');
-            $appointmentDate = $request->input('appointment_date');
+            $validated = $this->validateAppointmentRequest($request);
+            $appointments = $this->createSplitAppointments($validated);
 
-            $validated = $request->validate([
-                'school_name' => 'required|string|max:255',
-                'appointment_date' => [
-                    'required',
-                    'date',
-                    new ValidAppointmentDate(),
-                ],
-                'reason' => 'nullable|string',
-                'file_count' => [
-                    'required',
-                    'integer',
-                    'min:1',
-                    'max:' . Appointments::MAX_FILES_PER_APPOINTMENT,
-                    new AppointmentDailyCapacityRule($fileCount, $appointmentDate),
-                ],
-            ]);
+            // Notify admins about the new appointment (dispatch event for parent appointment)
+            if (!empty($appointments)) {
+                $parentAppointment = $appointments[0]; // First appointment is the parent
+                $user = Auth::user();
+                $message = count($appointments) > 1
+                    ? "New appointment request from {$user->name}: {$parentAppointment->school_name} (split into " . count($appointments) . " days)"
+                    : "New appointment request from {$user->name}: {$parentAppointment->school_name}";
 
-            $fileCount = $validated['file_count'];
-            $startDate = \Carbon\Carbon::parse($validated['appointment_date']);
-            $dailyLimit = Appointments::DAILY_FILE_LIMIT;
-
-            // Calculate how many days needed and split appointments
-            $appointments = [];
-            $remainingFiles = $fileCount;
-            $currentDate = $startDate->copy();
-            $splitSequence = 1;
-            $isFirstAppointment = true;
-
-            // Keep track of the parent appointment ID
-            $parentAppointment = null;
-
-            while ($remainingFiles > 0) {
-                // Skip weekends
-                while ($currentDate->isWeekend()) {
-                    $currentDate->addDay();
-                }
-
-                // Check if there's an event on this date
-                $hasEventOnDate = CalendarEvents::whereDate('event_date', $currentDate)->exists();
-                if ($hasEventOnDate) {
-                    $currentDate->addDay();
-                    continue; // Skip dates with events
-                }
-
-                // Check current capacity for this date
-                $existingFilesCount = Appointments::whereDate('appointment_date', $currentDate)
-                    ->sum('daily_file_count') ?: 0;
-
-                $availableCapacity = $dailyLimit - $existingFilesCount;
-
-                // If no capacity available, move to next day
-                if ($availableCapacity <= 0) {
-                    $currentDate->addDay();
-                    continue;
-                }
-
-                // Calculate files for this day
-                // For the first appointment (on selected date), try to place as many files as possible up to daily limit
-                // For subsequent appointments, place up to 200 files per day based on available capacity
-                if ($isFirstAppointment) {
-                    // First appointment: place min(remainingFiles, availableCapacity, dailyLimit) on selected date
-                    $filesForThisDay = min($remainingFiles, $availableCapacity, $dailyLimit);
-                    $isFirstAppointment = false;
-                } else {
-                    // Subsequent appointments: place min(remainingFiles, availableCapacity) per day
-                    $filesForThisDay = min($remainingFiles, $availableCapacity);
-                }
-
-                // Create appointment for this day
-                $appointment = Appointments::create([
-                    'school_name' => $validated['school_name'],
-                    'appointment_date' => $currentDate->format('Y-m-d'),
-                    'reason' => $validated['reason'] ?? null,
-                    'file_count' => $fileCount, // Original total
-                    'daily_file_count' => $filesForThisDay, // Files for this specific day
-                    'assigned_by' => Auth::id(),
-                    'status' => 'pending',
-                    'is_split' => $fileCount > $dailyLimit, // Mark if it's a split appointment
-                    'split_sequence' => $fileCount > $dailyLimit ? $splitSequence : null,
-                    'parent_appointment_id' => null, // Will update child appointments
-                ]);
-
-                // Set parent appointment (first one created)
-                if ($parentAppointment === null) {
-                    $parentAppointment = $appointment;
-                } else {
-                    // Update child appointments to reference parent
-                    $appointment->update(['parent_appointment_id' => $parentAppointment->id]);
-                }
-
-                $appointments[] = $appointment;
-                $remainingFiles -= $filesForThisDay;
-                $splitSequence++;
-                $currentDate->addDay();
+                AppointmentCreated::dispatch($parentAppointment, $message);
             }
 
-            // Update all appointments with total splits count
-            $totalSplits = count($appointments);
-            if ($totalSplits > 1) {
-                foreach ($appointments as $apt) {
-                    $apt->update(['total_splits' => $totalSplits]);
-                }
-            }
+            $message = $this->getSuccessMessage(count($appointments));
 
-            $message = $totalSplits > 1
-                ? "Appointment created and split into {$totalSplits} days due to daily capacity limits."
-                : 'Appointment created successfully';
-
-            if ($request->expectsJson() || $request->wantsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => $message,
-                    'appointments' => collect($appointments)->map(function ($apt) {
-                        return [
-                            'id' => $apt->id,
-                            'school_name' => $apt->school_name,
-                            'date' => $apt->appointment_date instanceof \Carbon\Carbon
-                                ? $apt->appointment_date->format('Y-m-d')
-                                : \Carbon\Carbon::parse($apt->appointment_date)->format('Y-m-d'),
-                            'file_count' => $apt->file_count,
-                        ];
-                    })
-                ]);
-            }
-
-            return redirect()->back()->with('success', $message);
+            return $this->handleResponse($request, $message, $appointments);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            if ($request->expectsJson() || $request->wantsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'errors' => $e->errors()
-                ], 422);
-            }
-            return redirect()->back()->withErrors($e->errors())->withInput();
+            return $this->handleValidationError($request, $e);
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Error creating appointment: ' . $e->getMessage());
-            if ($request->expectsJson() || $request->wantsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to create appointment: ' . $e->getMessage()
-                ], 500);
-            }
-            return redirect()->back()->withErrors(['error' => 'Failed to create appointment: ' . $e->getMessage()]);
+            return $this->handleException($request, $e);
         }
+    }
+
+    /**
+     * Validate the appointment request
+     */
+    private function validateAppointmentRequest(Request $request): array
+    {
+        $fileCount = $request->input('file_count');
+        $appointmentDate = $request->input('appointment_date');
+
+        return $request->validate([
+            'school_name' => 'required|string|max:255',
+            'appointment_date' => [
+                'required',
+                'date',
+                new ValidAppointmentDate(),
+            ],
+            'reason' => 'nullable|string',
+            'file_count' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:' . Appointments::MAX_FILES_PER_APPOINTMENT,
+                new AppointmentDailyCapacityRule($fileCount, $appointmentDate),
+            ],
+        ]);
+    }
+
+    /**
+     * Create split appointments across multiple days
+     */
+    private function createSplitAppointments(array $validated): array
+    {
+        $fileCount = $validated['file_count'];
+        $startDate = \Carbon\Carbon::parse($validated['appointment_date']);
+        $dailyLimit = Appointments::DAILY_FILE_LIMIT;
+
+        $appointments = [];
+        $remainingFiles = $fileCount;
+        $currentDate = $startDate->copy();
+        $splitSequence = 1;
+        $parentAppointment = null;
+
+        while ($remainingFiles > 0) {
+            $currentDate = $this->findNextAvailableDate($currentDate);
+            $availableCapacity = $this->getAvailableCapacity($currentDate, $dailyLimit);
+
+            if ($availableCapacity <= 0) {
+                $currentDate->addDay();
+                continue;
+            }
+
+            $filesForThisDay = $this->calculateFilesForDay($remainingFiles, $availableCapacity, $dailyLimit);
+            $appointment = $this->createAppointmentRecord($validated, $currentDate, $fileCount, $filesForThisDay, $splitSequence, $dailyLimit);
+
+            if ($parentAppointment === null) {
+                $parentAppointment = $appointment;
+            } else {
+                $appointment->update(['parent_appointment_id' => $parentAppointment->id]);
+            }
+
+            $appointments[] = $appointment;
+            $remainingFiles -= $filesForThisDay;
+            $splitSequence++;
+            $currentDate->addDay();
+        }
+
+        $this->updateTotalSplits($appointments);
+        return $appointments;
+    }
+
+    /**
+     * Find the next available date (skip weekends and events)
+     */
+    private function findNextAvailableDate(\Carbon\Carbon $date): \Carbon\Carbon
+    {
+        while ($date->isWeekend()) {
+            $date->addDay();
+        }
+
+        while (CalendarEvents::whereDate('event_date', $date)->exists()) {
+            $date->addDay();
+            while ($date->isWeekend()) {
+                $date->addDay();
+            }
+        }
+
+        return $date;
+    }
+
+    /**
+     * Get available capacity for a specific date
+     */
+    private function getAvailableCapacity(\Carbon\Carbon $date, int $dailyLimit): int
+    {
+        $existingFilesCount = Appointments::whereDate('appointment_date', $date)
+            ->sum('daily_file_count') ?: 0;
+
+        return max(0, $dailyLimit - $existingFilesCount);
+    }
+
+    /**
+     * Calculate files for a specific day (capped at daily limit)
+     */
+    private function calculateFilesForDay(int $remainingFiles, int $availableCapacity, int $dailyLimit): int
+    {
+        return min($remainingFiles, $availableCapacity, $dailyLimit);
+    }
+
+    /**
+     * Create a single appointment record
+     */
+    private function createAppointmentRecord(
+        array $validated,
+        \Carbon\Carbon $date,
+        int $fileCount,
+        int $filesForThisDay,
+        int $splitSequence,
+        int $dailyLimit
+    ): Appointments {
+        return Appointments::create([
+            'school_name' => $validated['school_name'],
+            'appointment_date' => $date->format('Y-m-d'),
+            'reason' => $validated['reason'] ?? null,
+            'file_count' => $fileCount,
+            'daily_file_count' => $filesForThisDay,
+            'assigned_by' => Auth::id(),
+            'status' => 'pending',
+            'is_split' => $fileCount > $dailyLimit,
+            'split_sequence' => $fileCount > $dailyLimit ? $splitSequence : null,
+            'parent_appointment_id' => null,
+        ]);
+    }
+
+    /**
+     * Update all appointments with total splits count
+     */
+    private function updateTotalSplits(array $appointments): void
+    {
+        $totalSplits = count($appointments);
+        if ($totalSplits > 1) {
+            foreach ($appointments as $appointment) {
+                $appointment->update(['total_splits' => $totalSplits]);
+            }
+        }
+    }
+
+    /**
+     * Get success message based on number of appointments created
+     */
+    private function getSuccessMessage(int $totalSplits): string
+    {
+        return $totalSplits > 1
+            ? "Appointment created and split into {$totalSplits} days due to daily capacity limits."
+            : 'Appointment created successfully';
+    }
+
+    /**
+     * Handle response (JSON or redirect)
+     */
+    private function handleResponse(Request $request, string $message, array $appointments)
+    {
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'appointments' => $this->formatAppointmentsForJson($appointments),
+            ]);
+        }
+
+        return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * Format appointments for JSON response
+     */
+    private function formatAppointmentsForJson(array $appointments): array
+    {
+        return collect($appointments)->map(function ($appointment) {
+            return [
+                'id' => $appointment->id,
+                'school_name' => $appointment->school_name,
+                'date' => $appointment->appointment_date instanceof \Carbon\Carbon
+                    ? $appointment->appointment_date->format('Y-m-d')
+                    : \Carbon\Carbon::parse($appointment->appointment_date)->format('Y-m-d'),
+                'file_count' => $appointment->file_count,
+            ];
+        })->toArray();
+    }
+
+    /**
+     * Handle validation errors
+     */
+    private function handleValidationError(Request $request, \Illuminate\Validation\ValidationException $e)
+    {
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $e->errors()
+            ], 422);
+        }
+        return redirect()->back()->withErrors($e->errors())->withInput();
+    }
+
+    /**
+     * Handle exceptions
+     */
+    private function handleException(Request $request, \Exception $e)
+    {
+        \Illuminate\Support\Facades\Log::error('Error creating appointment: ' . $e->getMessage());
+
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create appointment: ' . $e->getMessage()
+            ], 500);
+        }
+
+        return redirect()->back()->withErrors(['error' => 'Failed to create appointment: ' . $e->getMessage()]);
     }
 
     /**
