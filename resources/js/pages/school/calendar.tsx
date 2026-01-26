@@ -83,6 +83,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
         message: string;
         reason: string;
         checking: boolean;
+        requested_files?: number;
     } | null>(null);
     const [selectedDateCapacity, setSelectedDateCapacity] = useState<{
         capacity_used: number;
@@ -749,8 +750,8 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     setIsAddAppointmentSheetOpen(true);
                                                 }}
                                                 disabled={
-                                                    (selectedDateFull && new Date(selectedDateFull).toDateString() === new Date().toDateString()) ||
-                                                    (selectedDateCapacity && selectedDateCapacity.is_full)
+                                                    (!!selectedDateFull && new Date(selectedDateFull).toDateString() === new Date().toDateString()) ||
+                                                    (!!selectedDateCapacity && selectedDateCapacity.is_full)
                                                 }
                                                 title={
                                                     selectedDateCapacity?.is_full
@@ -866,8 +867,8 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                             setIsAddAppointmentSheetOpen(true);
                                                         }}
                                                         disabled={
-                                                            (selectedDateFull && new Date(selectedDateFull).toDateString() === new Date().toDateString()) ||
-                                                            (selectedDateCapacity && selectedDateCapacity.is_full)
+                                                            (!!selectedDateFull && new Date(selectedDateFull).toDateString() === new Date().toDateString()) ||
+                                                            (!!selectedDateCapacity && selectedDateCapacity.is_full)
                                                         }
                                                         className="w-full sm:w-auto"
                                                     >
@@ -1050,7 +1051,7 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     type="submit"
                                                     disabled={
                                                         processing ||
-                                                        (capacityCheck && !capacityCheck.available &&
+                                                        (!!capacityCheck && !capacityCheck.available &&
                                                          ['past_or_today', 'weekend', 'event'].includes(capacityCheck.reason))
                                                     }
                                                 >

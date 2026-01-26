@@ -159,9 +159,7 @@ export function DashboardActivityTable({ data }: DashboardActivityTableProps) {
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel({
-      pageSize: 10,
-    }),
+    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,

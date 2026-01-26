@@ -88,7 +88,7 @@ class Appointments extends Controller
                     'data' => [
                         'appointment_id' => $appointment->id,
                         'school_name' => $appointment->school_name,
-                        'appointment_date' => $appointment->appointment_date?->format('Y-m-d'),
+                        'appointment_date' => (string) $appointment->appointment_date,
                         'status' => $newStatus,
                         'file_count' => $appointment->file_count,
                     ],
@@ -196,7 +196,7 @@ class Appointments extends Controller
                 'data' => [
                     'appointment_id' => $appointment->id,
                     'school_name' => $appointment->school_name,
-                    'appointment_date' => $appointment->appointment_date?->format('Y-m-d'),
+                    'appointment_date' => (string) $appointment->appointment_date,
                     'status' => 'cancelled',
                     'file_count' => $appointment->file_count,
                 ],
