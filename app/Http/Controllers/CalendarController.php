@@ -144,10 +144,10 @@ class CalendarController extends Controller
     private function moveAppointmentsFromEventDate($eventDate)
     {
         $eventDate = \Carbon\Carbon::parse($eventDate);
-        
+
         // Find all appointments on the event date
         $appointments = Appointments::whereDate('appointment_date', $eventDate)->get();
-        
+
         if ($appointments->isEmpty()) {
             return 0;
         }
@@ -165,7 +165,7 @@ class CalendarController extends Controller
                     'appointment_date' => $nextAvailableDate->format('Y-m-d')
                 ]);
                 $movedCount++;
-                
+
                 Log::info("Appointment ID {$appointment->id} moved from {$eventDate->format('Y-m-d')} to {$nextAvailableDate->format('Y-m-d')} due to event creation.");
             } else {
                 Log::warning("Could not find available date for appointment ID {$appointment->id}. Appointment remains on {$eventDate->format('Y-m-d')}");

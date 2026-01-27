@@ -67,12 +67,12 @@ class Appointments extends Controller
         // Send notification to school user if status changed to complete or cancelled
         if ($oldStatus !== $newStatus && ($newStatus === 'complete' || $newStatus === 'cancelled')) {
             $schoolUser = User::find($appointment->assigned_by);
-            
+
             if ($schoolUser) {
-                $title = $newStatus === 'complete' 
-                    ? 'Appointment Completed' 
+                $title = $newStatus === 'complete'
+                    ? 'Appointment Completed'
                     : 'Appointment Cancelled';
-                
+
                 $message = $newStatus === 'complete'
                     ? "Your appointment for {$appointment->school_name} has been marked as complete."
                     : "Your appointment for {$appointment->school_name} has been cancelled.";
@@ -99,7 +99,7 @@ class Appointments extends Controller
         // Preserve query parameters from referrer if available
         $referrer = $request->header('referer');
         $queryParams = [];
-        
+
         if ($referrer && parse_url($referrer, PHP_URL_QUERY)) {
             parse_str(parse_url($referrer, PHP_URL_QUERY), $queryParams);
         }
@@ -183,7 +183,7 @@ class Appointments extends Controller
 
         // Send notification to school user
         $schoolUser = User::find($appointment->assigned_by);
-        
+
         if ($schoolUser) {
             Notification::create([
                 'user_id' => $schoolUser->id,

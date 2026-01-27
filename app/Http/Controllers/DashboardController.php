@@ -24,12 +24,12 @@ class DashboardController extends Controller
 
         // Calculate statistics for cards
         $totalAppointments = Appointments::count();
-        $totalFileCount = Appointments::sum('file_count');
+        $totalFileCount = Appointments::sum('daily_file_count');
         $completedAppointments = Appointments::where('status', 'complete')->count();
-        $completedFileCount = Appointments::where('status', 'complete')->sum('file_count');
+        $completedFileCount = Appointments::where('status', 'complete')->sum('daily_file_count');
         $approvedSchools = User::where('role', 'school')->where('is_approve', true)->count();
         $totalSchools = User::where('role', 'school')->count();
-        
+
         // Calculate growth rates (comparing last 30 days to previous 30 days)
         $last30DaysStart = Carbon::now()->subDays(30);
         $last30DaysEnd = Carbon::now();
@@ -38,7 +38,7 @@ class DashboardController extends Controller
 
         $recentAppointments = Appointments::whereBetween('created_at', [$last30DaysStart, $last30DaysEnd])->count();
         $previousAppointments = Appointments::whereBetween('created_at', [$previous30DaysStart, $previous30DaysEnd])->count();
-        $appointmentGrowthRate = $previousAppointments > 0 
+        $appointmentGrowthRate = $previousAppointments > 0
             ? round((($recentAppointments - $previousAppointments) / $previousAppointments) * 100, 1)
             : 0;
 
@@ -114,7 +114,7 @@ class DashboardController extends Controller
 
         // Recent activity data for table (last 50 items)
         $activityData = [];
-        
+
         // Get recent users (last 20)
         $recentUsers = User::where('role', 'school')
             ->orderBy('created_at', 'desc')
@@ -140,7 +140,7 @@ class DashboardController extends Controller
                     'id' => $appointment->id,
                     'type' => 'appointment',
                     'name' => $appointment->school_name,
-                    'details' => ($appointment->reason ?: 'Appointment') . ' - ' . $appointment->file_count . ' file(s)',
+                    'details' => ($appointment->reason ?: 'Appointment') . ' - ' . $appointment->daily_file_count . ' file(s)',
                     'status' => $appointment->status,
                     'createdAt' => $appointment->created_at->toIso8601String(),
                 ];
