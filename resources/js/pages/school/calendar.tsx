@@ -956,11 +956,17 @@ export default function Calendar({ appointments = [], events = [] }: CalendarPro
                                                     <Input
                                                         id="file_count"
                                                         type="number"
-                                                        min="0"
+                                                        min="1"
                                                         max="10000"
+                                                        step="1"
                                                         placeholder="Enter number of files"
-                                                        value={data.file_count}
-                                                        onChange={(e) => setData('file_count', parseInt(e.target.value) || 1)}
+                                                        value={data.file_count || ''}
+                                                        onChange={(e) => setData('file_count', parseInt(e.target.value, 10) || 0)}
+                                                        onBlur={(e) => {
+                                                            if (!data.file_count || data.file_count < 1) {
+                                                                setData('file_count', 1);
+                                                            }
+                                                        }}
                                                         required
                                                     />
                                                     <InputError message={errors.file_count} />
