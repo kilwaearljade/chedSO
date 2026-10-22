@@ -61,7 +61,7 @@ const getTypeBadge = (type: string) => {
 
 const getStatusBadge = (status?: string) => {
   if (!status) return null
-  
+
   const statusLower = status.toLowerCase()
   if (statusLower === "pending" || statusLower === "in progress") {
     return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending</Badge>

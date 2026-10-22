@@ -150,7 +150,7 @@ const chartConfig = {
 export function ChartAreaInteractive({ chartData: propChartData }: ChartAreaInteractiveProps = {}) {
   const isMobile = useIsMobile()
   const [timeRange, setTimeRange] = React.useState("90d")
-  
+
   // Use prop data if provided, otherwise use default
   const chartData = propChartData || defaultChartData
 
